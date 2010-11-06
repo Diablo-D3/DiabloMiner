@@ -12,22 +12,16 @@
 	</properties>
 	
 	<repositories>
+	   <repository>
+      <id>lwjgl</id>
+      <name>lwjgl</name>
+      <url>http://adterrasperaspera.com/lwjgl</url>
+    </repository>
 		<repository>
 			<id>lwjgl-local</id>
 			<name>lwjgl local</name>
 			<url>file:{$basedir}/contrib/lwjgl</url>
 		</repository>
-		<repository>
-		  <id>tuscany.repo</id>
-      <name>Tuscany Maven 2.x Repository</name>
-      <url>http://svn.apache.org/repos/asf/tuscany/maven</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
 	</repositories>
 	<dependencies>
 		<dependency>
@@ -44,22 +38,16 @@
 			<groupId>org.codehaus.jackson</groupId>
 			<artifactId>jackson-mapper-asl</artifactId>
 			<version>1.6.1</version>
-			<type>jar</type>
-			<scope>compile</scope>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
 			<version>1.4</version>
-			<type>jar</type>
-			<scope>compile</scope>
 		</dependency>
 		<dependency>
 			<groupId>commons-cli</groupId>
 			<artifactId>commons-cli</artifactId>
 			<version>1.2</version>
-			<type>jar</type>
-			<scope>compile</scope>
 		</dependency>
 	</dependencies>
 	
