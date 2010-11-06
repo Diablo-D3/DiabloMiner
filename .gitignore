@@ -1,0 +1,11 @@
+*.*swp
+.classpath
+.project
+.settings/*
+contrib/lwjgl-2.6.pom
+contrib/lwjgl-2.6.zip
+contrib/lwjgl-docs-2.6.zip
+contrib/lwjgl-source-2.6.zip
+contrib/lwjgl/*
+target/*
+
