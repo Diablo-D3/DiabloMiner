@@ -238,8 +238,10 @@ class DiabloMiner {
         }
       }, null);
 
-      queue = CL10.clCreateCommandQueue(context, device, CL10.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, null);
-
+      // OoOE doesn't work on OSX yet
+      //queue = CL10.clCreateCommandQueue(context, device, CL10.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, null);
+      queue = CL10.clCreateCommandQueue(context, device, 0, null);
+      
       String deviceSource;
       String ns;
       String checkOutput = "";
