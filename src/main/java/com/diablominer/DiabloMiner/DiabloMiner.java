@@ -34,8 +34,12 @@ import java.util.Date;
 import java.util.List;
 
 import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.codec.binary.Base64;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -89,22 +93,50 @@ class DiabloMiner {
     String ip = "127.0.0.1";
     
     Options options = new Options();
-    options.addOption("u", "user", true, "username for host");
-    options.addOption("p", "pass", true, "password for host");
     options.addOption("f", "fps", true, "target execution timing");
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("v", "vectorwidth", true, "override vector width");
     options.addOption("h", "help", false, "this help");
     
+    Option option = OptionBuilder.create('u');
+    option.setLongOpt("user");
+    option.setArgs(1);
+    option.setDescription("username for host");
+    option.setRequired(true);
+    options.addOption(option);
+    
+    option = OptionBuilder.create('p');
+    option.setLongOpt("pass");
+    option.setArgs(1);
+    option.setDescription("password for host");
+    option.setRequired(true);
+    options.addOption(option);
+    
     PosixParser parser = new PosixParser();
-    CommandLine line = parser.parse(options, args);
+    
+    CommandLine line = null;
+    
+    try {
+      line = parser.parse(options, args);
+      
+      if(line.hasOption("help")) {
+        throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
+      }
+    } catch (ParseException e) {
+      System.out.println(e.getLocalizedMessage() + "\n");
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp("DiabloMiner -u myuser -p mypassword [args]\n", "", options,
+          "\nRemember to set rpcuser and rpcpassword in your ~/.bitcoin/bitcoin.conf " +
+          "before starting bitcoind or bitcoin --daemon");
+      System.exit(0);
+    }
     
     if(line.hasOption("user"))
       user = line.getOptionValue("user");
 
     if(line.hasOption("pass"))
       pass = line.getOptionValue("pass");
-    
+
     if(line.hasOption("fps"))
       targetFPS = Integer.parseInt(line.getOptionValue("fps"));
     
@@ -113,12 +145,6 @@ class DiabloMiner {
     
     if(line.hasOption("vectorwidth"))
       forceVectorWidth = Integer.parseInt(line.getOptionValue("vectorwidth"));
-    
-    if(line.hasOption("help")) {
-      HelpFormatter formatter = new HelpFormatter();
-      formatter.printHelp("DiabloMiner", options);
-      System.exit(0);
-    }
 
     bitcoind = new URL("http://"+ ip + ":8332/");    
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
@@ -167,7 +193,10 @@ class DiabloMiner {
         then = now;
       }
       
-      Thread.sleep(1000/targetFPS);
+      if(!(now - startTime > 10000))
+        Thread.sleep(1);
+      else
+        Thread.sleep(1000);
     }
   }
   
