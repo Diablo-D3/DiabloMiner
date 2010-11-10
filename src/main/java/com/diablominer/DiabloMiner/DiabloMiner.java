@@ -32,6 +32,7 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.HelpFormatter;
@@ -69,10 +70,10 @@ class DiabloMiner {
   
   String source;
 
-  long hashCount = 0;
+  AtomicLong hashCount = new AtomicLong(0);
   
-  double startTime;
-  double now;
+  long startTime;
+  AtomicLong now = new AtomicLong(0);
   int currentBlocks = 1;
   
   final static int EXECUTION_TOTAL = 3;
@@ -171,7 +172,8 @@ class DiabloMiner {
   
     boolean running = true;
     
-    double then = now = startTime = System.nanoTime() / 1000000.0;
+    long then = startTime = System.nanoTime() / 1000000;
+    now.set((long) then);
 
     for(int i = 0; i < deviceStates.size(); i++)
       deviceStates.get(i).checkDevice();
@@ -179,20 +181,20 @@ class DiabloMiner {
     System.out.println("Started at " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM).format(new Date()));
     
     while(running) {     
-      now = System.nanoTime() / 1000000.0;
+      now.set(System.nanoTime() / 1000000);
       
       for(int i = 0; i < deviceStates.size(); i++)
         deviceStates.get(i).checkDevice();
       
-      if(now > then + 1000) {          
-        double adjustedCount = hashCount / ((now - startTime) / 1000.0) / 1000.0;
+      if(now.get() > then + 1000) {          
+        long adjustedCount = hashCount.get() / ((now.get() - startTime) / 1000) / 1000;
         
-        System.out.print("\r" + (int)adjustedCount + " khash/sec");
+        System.out.print("\r" + adjustedCount + " khash/sec");
         
-        then = now;
+        then = now.get();
       }
       
-      if(!(now - startTime > 10000))
+      if(!(now.get() - startTime > 10000))
         Thread.sleep(1);
       else
         Thread.sleep(1000);
@@ -239,8 +241,8 @@ class DiabloMiner {
 
     int base;
         
-    long runs;
-    long runsThen;
+    AtomicLong runs = new AtomicLong(0);
+    AtomicLong runsThen = new AtomicLong(0);
     
     DeviceState(CLPlatform platform, CLDevice device) throws Exception { 
       PointerBuffer properties = BufferUtils.createPointerBuffer(3);
@@ -366,15 +368,15 @@ class DiabloMiner {
     }
     
     void checkDevice() throws IOException {     
-      if(runs > runsThen) {
-        if((now - startTime) / runs < 1000.0 / (targetFPS * 2))
+      if(runs.get() > runsThen.get()) {
+        if((now.get() - startTime) / runs.get() < 1000 / (targetFPS * 2))
           workSize.put(0, workSize.get(0) + workSizeBase * 2);            
         
-        if((now - startTime) / runs > 1000.0 / targetFPS)
+        if((now.get() - startTime) / runs.get() > 1000 / targetFPS)
           if(workSize.get(0) > workSizeBase * 2)
             workSize.put(0, workSize.get(0) - workSizeBase);
         
-        runsThen = runs;
+        runsThen.set(runs.get());
       }
     }
 
@@ -415,7 +417,7 @@ class DiabloMiner {
       }
       
       void checkExecution() throws IOException {
-        runs++;
+        runs.incrementAndGet();
 
         CL10.clReleaseEvent(event);
         
@@ -443,7 +445,7 @@ class DiabloMiner {
                   DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
               
               currentWork.sendWork(bufferInt.get((i * 2) + 1));
-              currentWork.lastPull = now;
+              currentWork.lastPull = now.get();
               
               currentBlocks++;
             }
@@ -453,9 +455,9 @@ class DiabloMiner {
           }
         }
                  
-        if(currentWork.lastPull + 5000 < now) {
+        if(currentWork.lastPull + 5000 < now.get()) {
           currentWork.getWork();
-          currentWork.lastPull = now;
+          currentWork.lastPull = now.get();
         }
         
         System.arraycopy(currentWork.state, 0, state2, 0, 8);
@@ -495,7 +497,7 @@ class DiabloMiner {
         CL10.clEnqueueReadBuffer(queue, output, CL10.CL_FALSE, 0, buffer, eventPointer2, eventPointer3);
         event = queue.getCLEvent(eventPointer3.get(0));
           
-        hashCount += workSize.get(0) * vectorWidth;
+        hashCount.addAndGet(workSize.get(0) * vectorWidth);
         base += workSize.get(0);
 
         CL10.clReleaseEvent(queue.getCLEvent(eventPointer2.get(0)));
@@ -523,7 +525,7 @@ class DiabloMiner {
     final ObjectMapper mapper = new ObjectMapper();
     final ObjectNode getworkMessage;
 
-    double lastPull = 0;
+    long lastPull = 0;
     
     GetWorkParser() throws IOException {
       getworkMessage = mapper.createObjectNode();
