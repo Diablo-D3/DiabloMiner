@@ -91,11 +91,14 @@ class DiabloMiner {
     String user = "diablo";
     String pass = "miner";
     String ip = "127.0.0.1";
+    String port = "8332";
     
     Options options = new Options();
     options.addOption("f", "fps", true, "target execution timing");
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("v", "vectorwidth", true, "override vector width");
+    options.addOption("o", "host", true, "bitcoin host IP");
+    options.addOption("p", "port", true," bitcoin host port");
     options.addOption("h", "help", false, "this help");
     
     Option option = OptionBuilder.create('u');
@@ -146,7 +149,13 @@ class DiabloMiner {
     if(line.hasOption("vectorwidth"))
       forceVectorWidth = Integer.parseInt(line.getOptionValue("vectorwidth"));
 
-    bitcoind = new URL("http://"+ ip + ":8332/");    
+    if(line.hasOption("host"))
+      ip = line.getOptionValue("host");
+    
+    if(line.hasOption("port"))
+      port = line.getOptionValue("port");
+    
+    bitcoind = new URL("http://"+ ip + ":" + port + "/");    
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
  
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
