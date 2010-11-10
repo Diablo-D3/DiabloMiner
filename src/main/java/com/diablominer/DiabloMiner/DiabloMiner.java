@@ -28,10 +28,12 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.cli.CommandLine;
@@ -248,7 +250,7 @@ class DiabloMiner {
     
     final ExecutionState executions[];
 
-    int base;
+    AtomicInteger base = new AtomicInteger(0);
         
     AtomicLong runs = new AtomicLong(0);
     AtomicLong runsThen = new AtomicLong(0);
@@ -376,7 +378,7 @@ class DiabloMiner {
       }
     }
     
-    void checkDevice() throws IOException {     
+    void checkDevice() {     
       if(runs.get() > runsThen.get()) {
         if((now.get() - startTime) / runs.get() < 1000 / (targetFPS * 2))
           workSize.put(0, workSize.get(0) + workSizeBase * 2);            
@@ -410,7 +412,7 @@ class DiabloMiner {
       
       final GetWorkParser currentWork;
       
-      ExecutionState() throws Exception {
+      ExecutionState() throws NoSuchAlgorithmException {
         buffer = BufferUtils.createByteBuffer(vectorWidth*2*4);
         bufferInt = buffer.asIntBuffer();
         
@@ -425,7 +427,7 @@ class DiabloMiner {
         currentWork = new GetWorkParser();
       }
       
-      void checkExecution() throws IOException {
+      void checkExecution() {
         runs.incrementAndGet();
 
         CL10.clReleaseEvent(event);
@@ -492,7 +494,7 @@ class DiabloMiner {
               .setArg(14, state2[5])
               .setArg(15, state2[6])
               .setArg(16, state2[7])
-              .setArg(17, base)
+              .setArg(17, base.get())
               .setArg(18, output);
         
         if(reset) {
@@ -507,7 +509,7 @@ class DiabloMiner {
         event = queue.getCLEvent(eventPointer3.get(0));
           
         hashCount.addAndGet(workSize.get(0) * vectorWidth);
-        base += workSize.get(0);
+        base.addAndGet((int) workSize.get(0));
 
         CL10.clReleaseEvent(queue.getCLEvent(eventPointer2.get(0)));
         
@@ -518,9 +520,7 @@ class DiabloMiner {
       @Override
       protected void handleMessage(CLEvent event, int event_command_exec_status) {
         if(event_command_exec_status == CL10.CL_SUCCESS)
-          try {
-            this.checkExecution();
-          } catch (IOException e) {}
+          this.checkExecution();
       }
     }
   }
@@ -536,7 +536,7 @@ class DiabloMiner {
 
     long lastPull = 0;
     
-    GetWorkParser() throws IOException {
+    GetWorkParser() {
       getworkMessage = mapper.createObjectNode();
       getworkMessage.put("method", "getwork");
       getworkMessage.putArray("params");
@@ -545,11 +545,15 @@ class DiabloMiner {
       getWork();
     }
     
-    void getWork() throws IOException {
-      parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
+    void getWork() {
+      try {
+        parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
+      } catch(IOException e) {
+        System.out.println("\rCan't connect to Bitcoin: " + e.getLocalizedMessage());
+      }
     }
     
-    void sendWork(int nonce) throws IOException {
+    void sendWork(int nonce) {
       block[19] = nonce;
       
       ObjectNode sendworkMessage = mapper.createObjectNode();
@@ -559,7 +563,11 @@ class DiabloMiner {
       params.add(encodeBlock());
       sendworkMessage.put("id", 1);             
 
-      parse(doJSONRPC(bitcoind, userPass, mapper, sendworkMessage));
+      try {
+        parse(doJSONRPC(bitcoind, userPass, mapper, sendworkMessage));
+      } catch(IOException e) {
+        System.out.println("\rCan't connect to Bitcoin: " + e.getLocalizedMessage());
+      }
     }
     
     ObjectNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage)
@@ -590,6 +598,8 @@ class DiabloMiner {
         
         throw e2;
       }
+      
+      connection.disconnect();
       
       return (ObjectNode) responseMessage.get("result");
     }
