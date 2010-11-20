@@ -200,7 +200,9 @@ class DiabloMiner {
       try {
         if(!(now.get() - startTime > 10000)) {
           Thread.sleep(1);
-          hashCount.set(0);
+          
+          if(now.get() - startTime > 5000)
+            now.set(0);
         } else {
           Thread.sleep(1000);
         }
@@ -410,6 +412,7 @@ class DiabloMiner {
         output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, vectorWidth * 4, null);
         
         currentWork = new GetWorkParser();
+        currentWork.lastPull = now.get();
       }
       
       public void run() {
