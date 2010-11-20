@@ -1,7 +1,9 @@
 #define rot(x, y) rotate(x, (uintv)y)
+//#pragma OPENCL EXTENSION cl_amd_media_ops : enable
+//#define rot(x,y) amd_bitalign(x, x, (uintv)(32-y))
 
-#define R(x) (work[x] = (rot(work[x-2],15)^rot(work[x-2],13)^((work[x-2])>>10)) + work[x-7] + (rot(work[x-15],25)^rot(work[x-15],14)^((work[x-15])>>3)) + work[x-16])
-#define sharound(a,b,c,d,e,f,g,h,x,K) {h=(h+(rot(e, 26)^rot(e, 21)^rot(e, 7))+(g^(e&(f^g)))+K+x); t1=(rot(a, 30)^rot(a, 19)^rot(a, 10))+((a&b)|(c&(a|b))); d+=h; h+=t1;}
+#define R(x) (work[x] = (rot(work[x-2],15)^rot(work[x-2],13)^((work[x-2])>>(uintv)10)) + work[x-7] + (rot(work[x-15],25)^rot(work[x-15],14)^((work[x-15])>>(uintv)3)) + work[x-16])
+#define sharound(a,b,c,d,e,f,g,h,x,K) {h=(h+(rot(e, 26)^rot(e, 21)^rot(e, 7))+(g^(e&(f^g)))+(uintv)K+x); t1=(rot(a, 30)^rot(a, 19)^rot(a, 10))+((a&b)|(c&(a|b))); d+=h; h+=t1;}
 
 __kernel __attribute__((vec_type_hint(uintv))) $forcelocalsize void search(
             const uint block0, const uint block1, const uint block2,
@@ -27,7 +29,7 @@ __kernel __attribute__((vec_type_hint(uintv))) $forcelocalsize void search(
 	F=F1;
 	G=G1;
 	H=H1;
-  	
+  
 	work[0]=block0;
 	work[1]=block1;
 	work[2]=block2;
@@ -110,7 +112,7 @@ __kernel __attribute__((vec_type_hint(uintv))) $forcelocalsize void search(
 	sharound(D,E,F,G,H,A,B,C,R(61),0xA4506CEB);
 	sharound(C,D,E,F,G,H,A,B,R(62),0xBEF9A3F7);
 	sharound(B,C,D,E,F,G,H,A,R(63),0xC67178F2);
-	
+
   // hash the hash now
 	
 	work[0]=state0+A;
@@ -205,7 +207,7 @@ __kernel __attribute__((vec_type_hint(uintv))) $forcelocalsize void search(
 	//sharound(C,D,E,F,G,H,A,B,R(62),0xBEF9A3F7);
 	//sharound(B,C,D,E,F,G,H,A,R(63),0xC67178F2);
 
-	H += 0x5be0cd19;
+	H += (uintv)0x5be0cd19;
 
   $checkOutput
 }

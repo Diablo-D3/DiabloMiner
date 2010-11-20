@@ -26,14 +26,12 @@ import java.io.Writer;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.cli.CommandLine;
@@ -51,13 +49,10 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.opencl.CL;
 import org.lwjgl.opencl.CL10;
-import org.lwjgl.opencl.CL11;
 import org.lwjgl.opencl.CLCommandQueue;
 import org.lwjgl.opencl.CLContext;
 import org.lwjgl.opencl.CLContextCallback;
 import org.lwjgl.opencl.CLDevice;
-import org.lwjgl.opencl.CLEvent;
-import org.lwjgl.opencl.CLEventCallback;
 import org.lwjgl.opencl.CLKernel;
 import org.lwjgl.opencl.CLMem;
 import org.lwjgl.opencl.CLPlatform;
@@ -66,17 +61,20 @@ import org.lwjgl.opencl.CLProgram;
 class DiabloMiner {
   URL bitcoind;
   String userPass;
-  int targetFPS = 60;
+  float targetFPS = 60;
   int forceWorkSize = 0;
   int forceVectorWidth = 0;
   
   String source;
 
+  boolean running = true;
+  
   AtomicLong hashCount = new AtomicLong(0);
   
   long startTime;
   AtomicLong now = new AtomicLong(0);
   int currentBlocks = 1;
+  int currentAttempts = 1;
   
   final static int EXECUTION_TOTAL = 3;
   
@@ -143,7 +141,7 @@ class DiabloMiner {
       pass = line.getOptionValue("pass");
 
     if(line.hasOption("fps"))
-      targetFPS = Integer.parseInt(line.getOptionValue("fps"));
+      targetFPS = Float.parseFloat(line.getOptionValue("fps"));
     
     if(line.hasOption("worksize"))
       forceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
@@ -180,8 +178,6 @@ class DiabloMiner {
       for (CLDevice device : devices)
         deviceStates.add(this.new DeviceState(platform, device));
     }
-  
-    boolean running = true;
     
     long then = startTime = System.nanoTime() / 1000000;
     now.set((long) then);
@@ -191,24 +187,28 @@ class DiabloMiner {
     
     System.out.println("Started at " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM).format(new Date()));
     
+    System.out.print("Waiting...");
+    
     while(running) {     
       now.set(System.nanoTime() / 1000000);
       
       for(int i = 0; i < deviceStates.size(); i++)
         deviceStates.get(i).checkDevice();
-      
-      if(now.get() > then + 1000) {          
+            
+      if(now.get() - startTime > 10000) {
         long adjustedCount = hashCount.get() / ((now.get() - startTime) / 1000) / 1000;
-        
         System.out.print("\r" + adjustedCount + " khash/sec");
-        
         then = now.get();
       }
       
-      if(!(now.get() - startTime > 10000))
-        Thread.sleep(1);
-      else
-        Thread.sleep(1000);
+      try {
+        if(!(now.get() - startTime > 10000))
+          Thread.sleep(1);
+        else
+          Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        running = false;
+      }
     }
   }
   
@@ -236,8 +236,8 @@ class DiabloMiner {
   class DeviceState {
     final String deviceName;
  
+    final CLDevice device;
     final CLContext context;
-    final CLCommandQueue queue;
 
     final CLProgram program;
     final CLKernel kernel;
@@ -249,13 +249,13 @@ class DiabloMiner {
     final int vectorWidth;
     
     final ExecutionState executions[];
-
-    AtomicInteger base = new AtomicInteger(0);
         
     AtomicLong runs = new AtomicLong(0);
     AtomicLong runsThen = new AtomicLong(0);
     
-    DeviceState(CLPlatform platform, CLDevice device) throws Exception { 
+    DeviceState(CLPlatform platform, CLDevice device) throws Exception {
+      this.device = device;
+      
       PointerBuffer properties = BufferUtils.createPointerBuffer(3);
       properties.put(CL10.CL_CONTEXT_PLATFORM).put(platform.getPointer()).put(0).flip();
       int err = 0;
@@ -278,10 +278,6 @@ class DiabloMiner {
           System.out.println("ERROR: " + errinfo);
         }
       }, null);
-
-      // OoOE doesn't work on OSX yet
-      //queue = CL10.clCreateCommandQueue(context, device, CL10.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, null);
-      queue = CL10.clCreateCommandQueue(context, device, 0, null);
       
       String deviceSource;
       String ns;
@@ -290,7 +286,7 @@ class DiabloMiner {
       ns = "(uintv)(";
         
       for(int i = 0; i < vectorWidth; i++) {
-        ns += "nonce + " + (((long)Math.pow(2, 32) / vectorWidth) * i);
+        ns += "(nonce * " + vectorWidth + ") + " + i;
           
         String s;
         
@@ -300,8 +296,7 @@ class DiabloMiner {
           s = "";
           
         checkOutput += "if(H" + s + " == 0) { \n" 
-                    + "output[" + i + " * 2] = 0;\n"
-                    + "output[" + i + " * 2 + 1] = ns" + s + ";\n"
+                    + "output[" + i + "] = ns" + s + ";\n"
                     + "}\n";
           
         if(i != vectorWidth - 1) {
@@ -324,7 +319,7 @@ class DiabloMiner {
         deviceSource = deviceSource.replace("uintv", "uint" + vectorWidth);
       else
         deviceSource = deviceSource.replace("uintv", "uint");
-
+      
       program = CL10.clCreateProgramWithSource(context, deviceSource, null);
       err = CL10.clBuildProgram(program, device, "", null);
       if(err != CL10.CL_SUCCESS) {
@@ -364,23 +359,23 @@ class DiabloMiner {
       localWorkSize = BufferUtils.createPointerBuffer(1);
       localWorkSize.put(0, workSizeBase);
       
-      workSizeBase *= workSizeBase;
+      workSizeBase *= deviceCU * vectorWidth;
       
       workSize = BufferUtils.createPointerBuffer(1);
-      workSize.put(0, workSizeBase);
+      workSize.put(0, workSizeBase * 100);
       
       executions = new ExecutionState[EXECUTION_TOTAL];
       
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
-        executions[i].checkExecution();
-        CL10.clFlush(queue);
+        Thread executionThread = new Thread(executions[i]);
+        executionThread.start();
       }
     }
     
     void checkDevice() {     
       if(runs.get() > runsThen.get()) {
-        if((now.get() - startTime) / runs.get() < 1000 / (targetFPS * 2))
+        if((now.get() - startTime) / runs.get() < 1000 / (targetFPS * 1.5))
           workSize.put(0, workSize.get(0) + workSizeBase * 2);            
         
         if((now.get() - startTime) / runs.get() > 1000 / targetFPS)
@@ -391,136 +386,121 @@ class DiabloMiner {
       }
     }
 
-    class ExecutionState extends CLEventCallback {
+    class ExecutionState implements Runnable {
+      CLCommandQueue queue;
+      
       final ByteBuffer buffer;
-      final IntBuffer bufferInt;
       final CLMem output;
-      
-      CLEvent event;      
-      
-      final PointerBuffer eventPointer1 = BufferUtils.createPointerBuffer(1);
-      final PointerBuffer eventPointer2 = BufferUtils.createPointerBuffer(1);
-      final PointerBuffer eventPointer3 = BufferUtils.createPointerBuffer(1);
-      final ByteBuffer scratchBuffer = BufferUtils.createByteBuffer(8);
       
       final int[] state2 = new int[16];    
       
-      final MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      final ByteBuffer digestFirst = BufferUtils.createByteBuffer(128);
-      final IntBuffer digestFirstInt = digestFirst.asIntBuffer();
-      byte[] digestSecond;
+      final MessageDigest digestInside = MessageDigest.getInstance("SHA-256");
+      final MessageDigest digestOutside = MessageDigest.getInstance("SHA-256");
+      final ByteBuffer digestInput = ByteBuffer.allocate(80);
+      byte[] digestOutput;
       
       final GetWorkParser currentWork;
       
+      long base;
+      
       ExecutionState() throws NoSuchAlgorithmException {
-        buffer = BufferUtils.createByteBuffer(vectorWidth*2*4);
-        bufferInt = buffer.asIntBuffer();
+        buffer = BufferUtils.createByteBuffer(vectorWidth * 4);
         
         for(int i = 0; i < vectorWidth; i++)
-          bufferInt.put((i * 2), 1);
+          buffer.putInt(i*4, 0);
         
-        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, vectorWidth*2*4, null);
-        
-        CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, eventPointer1);
-        event = queue.getCLEvent(eventPointer1.get(0));
+        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, vectorWidth * 4, null);
         
         currentWork = new GetWorkParser();
       }
       
-      void checkExecution() {
-        runs.incrementAndGet();
-
-        CL10.clReleaseEvent(event);
+      public void run() {
+        queue = CL10.clCreateCommandQueue(context, device, 0, null);
         
-        boolean reset = false;
+        CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+        
+        while(running == true) {
+          CL10.clFinish(queue);
           
-        for(int i = 0; i < vectorWidth; i++) {
-          if(bufferInt.get(i * 2) == 0) {             
-            digestFirstInt.put(currentWork.block);
-            digestFirstInt.put(19, bufferInt.get((i * 2) + 1));
-            digestFirstInt.flip();
-            digest.update(digestFirst);
-            digestFirst.flip();
-            digestSecond = digest.digest();
-            digest.update(digestSecond);
-            digestFirst.put(digest.digest());
-            digestFirst.flip();
-            
-            long G = ((long)((0x000000FF & ((int)digestFirst.get(24))) << 24 | 
-                (0x000000FF & ((int)digestFirst.get(25))) << 16 |
-                (0x000000FF & ((int)digestFirst.get(26))) << 8 | 
-                (0x000000FF & ((int)digestFirst.get(27))))) & 0xFFFFFFFFL;
-                
-            if(G <= currentWork.target[6]) {
-              System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
+          runs.incrementAndGet();
+        
+          boolean reset = false;
+          
+          for(int i = 0; i < vectorWidth; i++) {
+            if(buffer.getInt(i*4) > 0) {     
+              for(int j = 0; j < 19; j++)
+                digestInput.putInt(j*4, currentWork.block[j]);
+              
+              digestInput.putInt(19*4, buffer.getInt(i*4));
+
+              digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
+              
+              long G = ((long)((0x000000FF & ((int)digestOutput[27])) << 24 | 
+                  (0x000000FF & ((int)digestOutput[26])) << 16 |
+                  (0x000000FF & ((int)digestOutput[25])) << 8 | 
+                  (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
+
+              System.out.println("\rAttempt " + currentAttempts +  " " +
                   DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+              currentAttempts++;
               
-              currentWork.sendWork(bufferInt.get((i * 2) + 1));
-              currentWork.lastPull = now.get();
+              if(G <= currentWork.target[6]) {
+                System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
+                    DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
               
-              currentBlocks++;
+                currentWork.sendWork(buffer.getInt(i*4));
+                currentWork.lastPull = now.get();
+                base = 0;
+              
+                currentBlocks++;
+              }
+              
+              buffer.putInt(i*4, 0);
+              reset = true;
             }
-              
-            bufferInt.put(i * 2, 1);
-            reset = true;
           }
-        }
-                 
-        if(currentWork.lastPull + 5000 < now.get()) {
-          currentWork.getWork();
-          currentWork.lastPull = now.get();
-        }
-        
-        System.arraycopy(currentWork.state, 0, state2, 0, 8);
-        
-        sharound(state2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.block[16], 0x428A2F98);
-        sharound(state2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.block[17], 0x71374491);
-        sharound(state2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.block[18], 0xB5C0FBCF);
-        
-        kernel.setArg(0, currentWork.block[16])
-              .setArg(1, currentWork.block[17])
-              .setArg(2, currentWork.block[18])
-              .setArg(3, currentWork.state[0])
-              .setArg(4, currentWork.state[1])
-              .setArg(5, currentWork.state[2])
-              .setArg(6, currentWork.state[3])
-              .setArg(7, currentWork.state[4])
-              .setArg(8, currentWork.state[5])
-              .setArg(9, currentWork.state[6])
-              .setArg(10, currentWork.state[7])
-              .setArg(11, state2[1])
-              .setArg(12, state2[2])
-              .setArg(13, state2[3])
-              .setArg(14, state2[5])
-              .setArg(15, state2[6])
-              .setArg(16, state2[7])
-              .setArg(17, base.get())
-              .setArg(18, output);
-        
-        if(reset) {
-          CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, eventPointer1);
-          CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSize, localWorkSize, eventPointer1, eventPointer2);
-          CL10.clReleaseEvent(queue.getCLEvent(eventPointer1.get(0)));
-        } else {
-          CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSize, localWorkSize, null, eventPointer2);
-        }
-        
-        CL10.clEnqueueReadBuffer(queue, output, CL10.CL_FALSE, 0, buffer, eventPointer2, eventPointer3);
-        event = queue.getCLEvent(eventPointer3.get(0));
           
-        hashCount.addAndGet(workSize.get(0) * vectorWidth);
-        base.addAndGet((int) workSize.get(0));
-
-        CL10.clReleaseEvent(queue.getCLEvent(eventPointer2.get(0)));
+          if(reset)
+            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+          
+          if(currentWork.lastPull + 5000 < now.get() || base > (Math.pow(2, 32) / vectorWidth)) {
+            currentWork.getWork();
+            currentWork.lastPull = now.get();
+            base = 0;
+          }
         
-        CL11.clSetEventCallback(event, CL10.CL_COMPLETE, this);
-        CL10.clFlush(queue);
-      }
+          System.arraycopy(currentWork.state, 0, state2, 0, 8);
+        
+          sharound(state2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.block[16], 0x428A2F98);
+          sharound(state2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.block[17], 0x71374491);
+          sharound(state2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.block[18], 0xB5C0FBCF);
+        
+          kernel.setArg(0, currentWork.block[16])
+                .setArg(1, currentWork.block[17])
+                .setArg(2, currentWork.block[18])
+                .setArg(3, currentWork.state[0])
+                .setArg(4, currentWork.state[1])
+                .setArg(5, currentWork.state[2])
+                .setArg(6, currentWork.state[3])
+                .setArg(7, currentWork.state[4])
+                .setArg(8, currentWork.state[5])
+                .setArg(9, currentWork.state[6])
+                .setArg(10, currentWork.state[7])
+                .setArg(11, state2[1])
+                .setArg(12, state2[2])
+                .setArg(13, state2[3])
+                .setArg(14, state2[5])
+                .setArg(15, state2[6])
+                .setArg(16, state2[7])
+                .setArg(17, (int)base)
+                .setArg(18, output);
 
-      @Override
-      protected void handleMessage(CLEvent event, int event_command_exec_status) {
-        if(event_command_exec_status == CL10.CL_SUCCESS)
-          this.checkExecution();
+          CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSize, localWorkSize, null, null);
+          CL10.clEnqueueReadBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+        
+          hashCount.addAndGet(workSize.get(0) * vectorWidth);
+          base += workSize.get(0);
+        }
       }
     }
   }
