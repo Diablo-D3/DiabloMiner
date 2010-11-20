@@ -75,10 +75,7 @@ class DiabloMiner {
   AtomicLong now = new AtomicLong(0);
   int currentBlocks = 1;
   
-  final static int EXECUTION_TOTAL = 3;
-  
-  final static String VECTOR[] = new String[] { "0", "1", "2", "3", "4", "5", "6", "7",
-                                                "8", "9", "a", "b", "c", "d", "e", "f"};
+  final static int EXECUTION_TOTAL = 1;
 
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
@@ -201,10 +198,12 @@ class DiabloMiner {
       }
       
       try {
-        if(!(now.get() - startTime > 10000))
+        if(!(now.get() - startTime > 10000)) {
           Thread.sleep(1);
-        else
+          hashCount.set(0);
+        } else {
           Thread.sleep(1000);
+        }
       } catch (InterruptedException e) {
         running = false;
       }
@@ -290,7 +289,7 @@ class DiabloMiner {
         String s;
         
         if(vectorWidth > 1)
-          s = ".s" + VECTOR[i];
+          s = ".s" + "0123456789abcdef".charAt(i);
         else
           s = "";
           
