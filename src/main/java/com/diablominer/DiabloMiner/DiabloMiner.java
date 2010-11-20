@@ -74,7 +74,6 @@ class DiabloMiner {
   long startTime;
   AtomicLong now = new AtomicLong(0);
   int currentBlocks = 1;
-  int currentAttempts = 1;
   
   final static int EXECUTION_TOTAL = 3;
   
@@ -439,10 +438,6 @@ class DiabloMiner {
                   (0x000000FF & ((int)digestOutput[26])) << 16 |
                   (0x000000FF & ((int)digestOutput[25])) << 8 | 
                   (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
-
-              System.out.println("\rAttempt " + currentAttempts +  " " +
-                  DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
-              currentAttempts++;
               
               if(G <= currentWork.target[6]) {
                 System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
