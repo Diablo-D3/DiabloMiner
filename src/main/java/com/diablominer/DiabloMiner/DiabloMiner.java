@@ -75,7 +75,7 @@ class DiabloMiner {
   AtomicLong now = new AtomicLong(0);
   int currentBlocks = 1;
   
-  final static int EXECUTION_TOTAL = 1;
+  final static int EXECUTION_TOTAL = 3;
 
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
