@@ -198,11 +198,12 @@ class DiabloMiner {
       }
       
       try {
-        if(!(now.get() - startTime > 10000)) {
+        if(now.get() - startTime < 10000) {
           Thread.sleep(1);
           
-          if(now.get() - startTime > 5000)
-            now.set(0);
+          if(now.get() - startTime < 100) {
+            hashCount.set(0);
+          }
         } else {
           Thread.sleep(1000);
         }
