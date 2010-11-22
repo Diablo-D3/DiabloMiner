@@ -198,7 +198,7 @@ class DiabloMiner {
       }
       
       try {
-        if(now.get() - startTime < 10000) {
+        if(now.get() - startTime < 5000) {
           Thread.sleep(1);
           
           if(now.get() - startTime < 100) {
@@ -374,12 +374,17 @@ class DiabloMiner {
       }
     }
     
-    void checkDevice() {     
-      if(runs.get() > runsThen.get()) {
-        if((now.get() - startTime) / runs.get() < 1000 / (targetFPS * 1.5))
-          workSize.put(0, workSize.get(0) + workSizeBase * 2);            
-        
-        if((now.get() - startTime) / runs.get() > 1000 / targetFPS)
+    void checkDevice() {
+      long elapsed = now.get() - startTime;
+      
+      if(runs.get() > (runsThen.get() + targetFPS)) {
+        long basis = elapsed / runs.get();
+
+        if(basis < 1000 / (targetFPS * 2))
+          workSize.put(0, workSize.get(0) + (workSizeBase * workSizeBase));
+        else if(basis < 1000 / targetFPS)
+          workSize.put(0, workSize.get(0) + workSizeBase);
+        else if(basis > 1000 / targetFPS)
           if(workSize.get(0) > workSizeBase * 2)
             workSize.put(0, workSize.get(0) - workSizeBase);
         
@@ -421,11 +426,7 @@ class DiabloMiner {
         
         CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
         
-        while(running == true) {
-          CL10.clFinish(queue);
-          
-          runs.incrementAndGet();
-        
+        while(running == true) {       
           boolean reset = false;
           
           for(int i = 0; i < vectorWidth; i++) {
@@ -494,10 +495,12 @@ class DiabloMiner {
                 .setArg(18, output);
 
           CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSize, localWorkSize, null, null);
-          CL10.clEnqueueReadBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
         
           hashCount.addAndGet(workSize.get(0) * vectorWidth);
           base += workSize.get(0);
+          runs.incrementAndGet();
+          
+          CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
         }
       }
     }
