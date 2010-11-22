@@ -64,6 +64,7 @@ class DiabloMiner {
   float targetFPS = 60;
   int forceWorkSize = 0;
   int forceVectorWidth = 0;
+  boolean forceBitAlign = false;
   
   String source;
 
@@ -95,6 +96,7 @@ class DiabloMiner {
     options.addOption("v", "vectorwidth", true, "override vector width");
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("p", "port", true," bitcoin host port");
+    options.addOption("a", "bitalign", false, "force bitalign on for Radeon 5xxx + ATI SDK 2.1");
     options.addOption("h", "help", false, "this help");
     
     Option option = OptionBuilder.create('u');
@@ -142,9 +144,19 @@ class DiabloMiner {
     if(line.hasOption("worksize"))
       forceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
     
-    if(line.hasOption("vectorwidth"))
+    if(line.hasOption("vectorwidth")) {
       forceVectorWidth = Integer.parseInt(line.getOptionValue("vectorwidth"));
+      
+      if(!(forceVectorWidth == 1 || forceVectorWidth == 2 || forceVectorWidth == 4 ||
+          forceVectorWidth == 8 || forceVectorWidth == 16)) {
+        System.err.println("Error: Vector width must be 1, 2, 4, 8, or 16");
+        System.exit(0);
+      }
+    }
 
+    if(line.hasOption("forcebitalign"))
+      forceBitAlign = true;
+    
     if(line.hasOption("host"))
       ip = line.getOptionValue("host");
     
@@ -280,11 +292,12 @@ class DiabloMiner {
         }
       }, null);
       
-      String deviceSource;
+      String compileOptions = "-D VECTORS=" + vectorWidth;
+      
       String ns;
       String checkOutput = "";
 
-      ns = "(uintv)(";
+      ns = "(u)(";
         
       for(int i = 0; i < vectorWidth; i++) {
         ns += "(nonce * " + vectorWidth + ") + " + i;
@@ -296,33 +309,30 @@ class DiabloMiner {
         else
           s = "";
           
-        checkOutput += "if(H" + s + " == 0) { \n" 
-                    + "output[" + i + "] = ns" + s + ";\n"
-                    + "}\n";
+        checkOutput += "if(H" + s + " == 0) {" 
+                    + "output[" + i + "] = ns" + s + ";"
+                    + "}";
           
         if(i != vectorWidth - 1) {
           ns += ", ";
         }
       }
         
-      ns += ")";
-              
-      deviceSource = source.replace("$ns", ns);
-      deviceSource = deviceSource.replace("$checkOutput", checkOutput);
+      ns += ")";    
+
+      compileOptions += " -D NS=\"" + ns + "\"";
+      compileOptions += " -D CHECKOUTPUT=\"" + checkOutput + "\"";
+      
+      if(forceBitAlign)
+        compileOptions += " -D FORCEBITALIGN";
       
       if(forceWorkSize > 0)
-        deviceSource = deviceSource.replace("$forcelocalsize",
-            "__attribute__((reqd_work_group_size(" + forceWorkSize + ", 1, 1)))");
+        compileOptions += " -D WORKGROUPSIZE=\"__attribute__((reqd_work_group_size(" + forceWorkSize + ", 1, 1)))\"";
       else
-        deviceSource = deviceSource.replace("$forcelocalsize", "");
+        compileOptions += " -D WORKGROUPSIZE=\"\"";
       
-      if(vectorWidth > 1)
-        deviceSource = deviceSource.replace("uintv", "uint" + vectorWidth);
-      else
-        deviceSource = deviceSource.replace("uintv", "uint");
-      
-      program = CL10.clCreateProgramWithSource(context, deviceSource, null);
-      err = CL10.clBuildProgram(program, device, "", null);
+      program = CL10.clCreateProgramWithSource(context, source, null);
+      err = CL10.clBuildProgram(program, device, compileOptions, null);
       if(err != CL10.CL_SUCCESS) {
         System.out.println();
 

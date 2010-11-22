@@ -1,11 +1,26 @@
-#define rot(x, y) rotate(x, (uintv)y)
-//#pragma OPENCL EXTENSION cl_amd_media_ops : enable
-//#define rot(x,y) amd_bitalign(x, x, (uintv)(32-y))
+#if VECTORS == 2
+typedef uint2 u;
+#elif VECTORS == 4
+typedef uint4 u;
+#elif VECTORS == 8
+typedef uint8 u;
+#elif VECTORS == 16
+typedef uint16 u;
+#else
+typedef uint u;
+#endif
 
-#define R(x) (work[x] = (rot(work[x-2],15)^rot(work[x-2],13)^((work[x-2])>>(uintv)10)) + work[x-7] + (rot(work[x-15],25)^rot(work[x-15],14)^((work[x-15])>>(uintv)3)) + work[x-16])
-#define sharound(a,b,c,d,e,f,g,h,x,K) {h=(h+(rot(e, 26)^rot(e, 21)^rot(e, 7))+(g^(e&(f^g)))+(uintv)K+x); t1=(rot(a, 30)^rot(a, 19)^rot(a, 10))+((a&b)|(c&(a|b))); d+=h; h+=t1;}
+#if FORCEBITALIGN
+#pragma OPENCL EXTENSION cl_amd_media_ops : enable
+#define rot(x,y) amd_bitalign(x, x, (u)(32-y))
+#else
+#define rot(x, y) rotate(x, (u)y)
+#endif
 
-__kernel __attribute__((vec_type_hint(uintv))) $forcelocalsize void search(
+#define R(x) (work[x] = (rot(work[x-2],15)^rot(work[x-2],13)^((work[x-2])>>(u)10)) + work[x-7] + (rot(work[x-15],25)^rot(work[x-15],14)^((work[x-15])>>(u)3)) + work[x-16])
+#define sharound(a,b,c,d,e,f,g,h,x,K) {h=(h+(rot(e, 26)^rot(e, 21)^rot(e, 7))+(g^(e&(f^g)))+(u)K+x); t1=(rot(a, 30)^rot(a, 19)^rot(a, 10))+((a&b)|(c&(a|b))); d+=h; h+=t1;}
+
+__kernel __attribute__((vec_type_hint(u))) WORKGROUPSIZE void search(
             const uint block0, const uint block1, const uint block2,
 						const uint state0, const uint state1, const uint state2, const uint state3,
 						const uint state4, const uint state5, const uint state6, const uint state7,
@@ -15,11 +30,11 @@ __kernel __attribute__((vec_type_hint(uintv))) $forcelocalsize void search(
 						__global uint * output)
 {
 	uint nonce = base + get_global_id(0);
-	uintv ns = $ns;
+	u ns = NS;
 	
-	uintv work[64];
-  uintv A,B,C,D,E,F,G,H;
-	uintv t1;
+	u work[64];
+  u A,B,C,D,E,F,G,H;
+	u t1;
 	
 	A=state0;
 	B=B1;
@@ -207,8 +222,8 @@ __kernel __attribute__((vec_type_hint(uintv))) $forcelocalsize void search(
 	//sharound(C,D,E,F,G,H,A,B,R(62),0xBEF9A3F7);
 	//sharound(B,C,D,E,F,G,H,A,R(63),0xC67178F2);
 
-	H += (uintv)0x5be0cd19;
+	H += (u)0x5be0cd19;
 
-  $checkOutput
+  CHECKOUTPUT
 }
 // end
