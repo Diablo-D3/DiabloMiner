@@ -65,6 +65,8 @@ class DiabloMiner {
   int forceWorkSize = 0;
   int forceVectorWidth = 0;
   boolean forceBitAlign = false;
+  boolean debug = false;
+  boolean forceSplit = false;
   
   String source;
 
@@ -75,6 +77,7 @@ class DiabloMiner {
   long startTime;
   AtomicLong now = new AtomicLong(0);
   int currentBlocks = 1;
+  int currentAttempts = 1;
   
   final static int EXECUTION_TOTAL = 3;
 
@@ -97,6 +100,8 @@ class DiabloMiner {
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("p", "port", true," bitcoin host port");
     options.addOption("a", "bitalign", false, "force bitalign on for Radeon 5xxx + ATI SDK 2.1");
+    options.addOption("d", "debug", false, "enable extra debug output");
+    options.addOption("s", "split", false, "enable payload split, faster on Radeon 4xxx");
     options.addOption("h", "help", false, "this help");
     
     Option option = OptionBuilder.create('u');
@@ -154,8 +159,14 @@ class DiabloMiner {
       }
     }
 
-    if(line.hasOption("forcebitalign"))
+    if(line.hasOption("bitalign"))
       forceBitAlign = true;
+    
+    if(line.hasOption("debug"))
+      debug = true;
+    
+    if(line.hasOption("split"))
+      forceSplit = true;
     
     if(line.hasOption("host"))
       ip = line.getOptionValue("host");
@@ -253,11 +264,14 @@ class DiabloMiner {
     final CLContext context;
 
     final CLProgram program;
-    final CLKernel kernel;
-    
+    final CLKernel kernel0;
+    final CLKernel kernel1;
+    final CLKernel kernel2;
+
+    long workSize;
+    long workSizeMax;
     long workSizeBase;
-    final PointerBuffer workSize;
-    final PointerBuffer localWorkSize;
+    final PointerBuffer localWorkSize = BufferUtils.createPointerBuffer(1);
 
     final int vectorWidth;
     
@@ -348,33 +362,53 @@ class DiabloMiner {
         throw new Exception("Failed to build program on " + deviceName);
       }
 
-      kernel = CL10.clCreateKernel(program, "search", null);
-      if(kernel == null) {
-        System.out.println();
-        throw new Exception("Failed to create kernel " + deviceName);
+      if(!forceSplit) {
+        kernel0 = CL10.clCreateKernel(program, "search0", null);
+        if(kernel0 == null) {
+          System.out.println();
+          throw new Exception("Failed to create kernel on " + deviceName);
+        }
+        
+        kernel1 = null;
+        kernel2 = null;
+      } else {
+        kernel0 = null;
+        
+        kernel1 = CL10.clCreateKernel(program, "search1", null);
+        if(kernel1 == null) {
+          System.out.println();
+          throw new Exception("Failed to create first kernel on " + deviceName);
+        }
+      
+        kernel2 = CL10.clCreateKernel(program, "search2", null);
+        if(kernel2 == null) {
+          System.out.println();
+          throw new Exception("Failed to create second kernel on " + deviceName);
+        }
       }
       
       if(forceWorkSize == 0) {
         ByteBuffer rkwgs = BufferUtils.createByteBuffer(8);
-        err = CL10.clGetKernelWorkGroupInfo(kernel, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
-        workSizeBase = rkwgs.getLong(0);
+        err = CL10.clGetKernelWorkGroupInfo(kernel1, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
+        localWorkSize.put(0, rkwgs.getLong(0));
       
-        if(!(err == CL10.CL_SUCCESS) || workSizeBase == 0)
-          workSizeBase = deviceWorkSize;
+        if(!(err == CL10.CL_SUCCESS) || localWorkSize.get(0) == 0)
+          localWorkSize.put(0, deviceWorkSize);
       } else {
-        workSizeBase = forceWorkSize;
+        localWorkSize.put(0, forceWorkSize);
       }
       
-      System.out.println(workSizeBase + ")");
-            
-      localWorkSize = BufferUtils.createPointerBuffer(1);
-      localWorkSize.put(0, workSizeBase);
+      System.out.println(localWorkSize.get(0) + ")");
       
-      workSizeBase *= deviceCU * vectorWidth;
+      workSizeBase = localWorkSize.get(0) * deviceCU;
       
-      workSize = BufferUtils.createPointerBuffer(1);
-      workSize.put(0, workSizeBase * 100);
+      if(!forceSplit)
+        workSizeMax = (long) (Math.pow(2, 32) - 1);
+      else
+        workSizeMax = 16*1024*1024 / 4 / vectorWidth;
       
+      workSize = workSizeBase * workSizeBase;
+
       executions = new ExecutionState[EXECUTION_TOTAL];
       
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
@@ -389,14 +423,15 @@ class DiabloMiner {
       
       if(runs.get() > (runsThen.get() + targetFPS)) {
         long basis = elapsed / runs.get();
-
-        if(basis < 1000 / (targetFPS * 2))
-          workSize.put(0, workSize.get(0) + (workSizeBase * workSizeBase));
-        else if(basis < 1000 / targetFPS)
-          workSize.put(0, workSize.get(0) + workSizeBase);
-        else if(basis > 1000 / targetFPS)
-          if(workSize.get(0) > workSizeBase * 2)
-            workSize.put(0, workSize.get(0) - workSizeBase);
+        
+        if(basis < 1000 / targetFPS * 2 && workSizeMax > workSize + (workSizeBase * workSizeBase))
+          workSize += (workSizeBase * workSizeBase);
+        else if(basis < 1000 / targetFPS && workSizeMax > workSize + workSizeBase)
+          workSize += workSizeBase;
+        else if(basis > 1000 / targetFPS / 2 && workSize > (workSizeBase * workSizeBase) + workSizeBase)
+          workSize -= (workSizeBase * workSizeBase);
+        else if(basis > 1000 / targetFPS && workSize > workSizeBase * 2)
+          workSize -= workSizeBase;
         
         runsThen.set(runs.get());
       }
@@ -407,6 +442,9 @@ class DiabloMiner {
       
       final ByteBuffer buffer;
       final CLMem output;
+      final CLMem store[] = new CLMem[8];
+      
+      final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
       
       final int[] state2 = new int[16];    
       
@@ -426,6 +464,10 @@ class DiabloMiner {
           buffer.putInt(i*4, 0);
         
         output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, vectorWidth * 4, null);
+        
+        if(forceSplit)
+          for(int i = 0; i < 8; i++)
+            store[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_READ_WRITE, 16*1024*1024, null);
         
         currentWork = new GetWorkParser();
         currentWork.lastPull = now.get();
@@ -452,6 +494,12 @@ class DiabloMiner {
                   (0x000000FF & ((int)digestOutput[26])) << 16 |
                   (0x000000FF & ((int)digestOutput[25])) << 8 | 
                   (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
+              
+              if(debug) {
+                System.out.println("\rAttempt " + currentAttempts + " found on " + deviceName + " at " +
+                    DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+                currentAttempts++;
+              }
               
               if(G <= currentWork.target[6]) {
                 System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
@@ -484,30 +532,79 @@ class DiabloMiner {
           sharound(state2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.block[17], 0x71374491);
           sharound(state2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.block[18], 0xB5C0FBCF);
         
-          kernel.setArg(0, currentWork.block[16])
-                .setArg(1, currentWork.block[17])
-                .setArg(2, currentWork.block[18])
-                .setArg(3, currentWork.state[0])
-                .setArg(4, currentWork.state[1])
-                .setArg(5, currentWork.state[2])
-                .setArg(6, currentWork.state[3])
-                .setArg(7, currentWork.state[4])
-                .setArg(8, currentWork.state[5])
-                .setArg(9, currentWork.state[6])
-                .setArg(10, currentWork.state[7])
-                .setArg(11, state2[1])
-                .setArg(12, state2[2])
-                .setArg(13, state2[3])
-                .setArg(14, state2[5])
-                .setArg(15, state2[6])
-                .setArg(16, state2[7])
-                .setArg(17, (int)base)
-                .setArg(18, output);
+          int offset = (int)base;
+          workSizeTemp.put(0, workSize);
+          
+          if(!forceSplit) {
+            kernel0.setArg(0, currentWork.block[16])
+                   .setArg(1, currentWork.block[17])
+                   .setArg(2, currentWork.block[18])
+                   .setArg(3, currentWork.state[0])
+                   .setArg(4, currentWork.state[1])
+                   .setArg(5, currentWork.state[2])
+                   .setArg(6, currentWork.state[3])
+                   .setArg(7, currentWork.state[4])
+                   .setArg(8, currentWork.state[5])
+                   .setArg(9, currentWork.state[6])
+                   .setArg(10, currentWork.state[7])
+                   .setArg(11, state2[1])
+                   .setArg(12, state2[2])
+                   .setArg(13, state2[3])
+                   .setArg(14, state2[5])
+                   .setArg(15, state2[6])
+                   .setArg(16, state2[7])
+                   .setArg(17, offset)
+                   .setArg(18, output);
 
-          CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSize, localWorkSize, null, null);
-        
-          hashCount.addAndGet(workSize.get(0) * vectorWidth);
-          base += workSize.get(0);
+            CL10.clEnqueueNDRangeKernel(queue, kernel0, 1, null, workSizeTemp, localWorkSize, null, null);
+          } else {
+            kernel1.setArg(0, currentWork.block[16])
+                   .setArg(1, currentWork.block[17])
+                   .setArg(2, currentWork.block[18])
+                   .setArg(3, currentWork.state[0])
+                   .setArg(4, currentWork.state[4])
+                   .setArg(5, state2[1])
+                   .setArg(6, state2[2])
+                   .setArg(7, state2[3])
+                   .setArg(8, state2[5])
+                   .setArg(9, state2[6])
+                   .setArg(10, state2[7])
+                   .setArg(11, offset)
+                   .setArg(12, store[0])
+                   .setArg(13, store[1])
+                   .setArg(14, store[2])
+                   .setArg(15, store[3])
+                   .setArg(16, store[4])
+                   .setArg(17, store[5])
+                   .setArg(18, store[6])
+                   .setArg(19, store[7]);
+
+            CL10.clEnqueueNDRangeKernel(queue, kernel1, 1, null, workSizeTemp, localWorkSize, null, null);
+          
+            kernel2.setArg(0, currentWork.state[0])
+                   .setArg(1, currentWork.state[1])
+                   .setArg(2, currentWork.state[2])
+                   .setArg(3, currentWork.state[3])
+                   .setArg(4, currentWork.state[4])
+                   .setArg(5, currentWork.state[5])
+                   .setArg(6, currentWork.state[6])
+                   .setArg(7, currentWork.state[7])
+                   .setArg(8, offset)
+                   .setArg(9, output)
+                   .setArg(10, store[0])
+                   .setArg(11, store[1])
+                   .setArg(12, store[2])
+                   .setArg(13, store[3])
+                   .setArg(14, store[4])
+                   .setArg(15, store[5])
+                   .setArg(16, store[6])
+                   .setArg(17, store[7]);
+          
+            CL10.clEnqueueNDRangeKernel(queue, kernel2, 1, null, workSizeTemp, localWorkSize, null, null);
+          }
+          
+          hashCount.addAndGet(workSizeTemp.get(0) * vectorWidth);
+          base += workSizeTemp.get(0);
           runs.incrementAndGet();
           
           CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
