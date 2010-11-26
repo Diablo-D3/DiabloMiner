@@ -389,7 +389,12 @@ class DiabloMiner {
       
       if(forceWorkSize == 0) {
         ByteBuffer rkwgs = BufferUtils.createByteBuffer(8);
-        err = CL10.clGetKernelWorkGroupInfo(kernel1, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
+        
+        if(!forceSplit)
+          err = CL10.clGetKernelWorkGroupInfo(kernel0, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
+        else
+          err = CL10.clGetKernelWorkGroupInfo(kernel1, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
+        
         localWorkSize.put(0, rkwgs.getLong(0));
       
         if(!(err == CL10.CL_SUCCESS) || localWorkSize.get(0) == 0)
@@ -534,7 +539,8 @@ class DiabloMiner {
         
           int offset = (int)base;
           workSizeTemp.put(0, workSize);
-          
+          int err = 0;
+
           if(!forceSplit) {
             kernel0.setArg(0, currentWork.block[16])
                    .setArg(1, currentWork.block[17])
@@ -556,7 +562,13 @@ class DiabloMiner {
                    .setArg(17, offset)
                    .setArg(18, output);
 
-            CL10.clEnqueueNDRangeKernel(queue, kernel0, 1, null, workSizeTemp, localWorkSize, null, null);
+            err = CL10.clEnqueueNDRangeKernel(queue, kernel0, 1, null, workSizeTemp, localWorkSize, null, null);
+            
+            if(err !=  CL10.CL_SUCCESS) {
+              System.out.println();
+              System.err.println("Did not queue kernel, error " + err);
+              running = false;
+            }              
           } else {
             kernel1.setArg(0, currentWork.block[16])
                    .setArg(1, currentWork.block[17])
@@ -579,8 +591,14 @@ class DiabloMiner {
                    .setArg(18, store[6])
                    .setArg(19, store[7]);
 
-            CL10.clEnqueueNDRangeKernel(queue, kernel1, 1, null, workSizeTemp, localWorkSize, null, null);
+            err = CL10.clEnqueueNDRangeKernel(queue, kernel1, 1, null, workSizeTemp, localWorkSize, null, null);
           
+            if(err !=  CL10.CL_SUCCESS) {
+              System.out.println();
+              System.err.println("Did not queue kernel, error " + err);
+              running = false;
+            }    
+            
             kernel2.setArg(0, currentWork.state[0])
                    .setArg(1, currentWork.state[1])
                    .setArg(2, currentWork.state[2])
@@ -600,7 +618,13 @@ class DiabloMiner {
                    .setArg(16, store[6])
                    .setArg(17, store[7]);
           
-            CL10.clEnqueueNDRangeKernel(queue, kernel2, 1, null, workSizeTemp, localWorkSize, null, null);
+            err = CL10.clEnqueueNDRangeKernel(queue, kernel2, 1, null, workSizeTemp, localWorkSize, null, null);
+            
+            if(err !=  CL10.CL_SUCCESS) {
+              System.out.println();
+              System.err.println("Did not queue kernel, erorr " + err);
+              running = false;
+            }    
           }
           
           hashCount.addAndGet(workSizeTemp.get(0) * vectorWidth);
