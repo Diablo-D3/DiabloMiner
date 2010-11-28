@@ -26,6 +26,7 @@ import java.io.Writer;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
@@ -66,7 +67,6 @@ class DiabloMiner {
   int forceVectorWidth = 0;
   boolean forceBitAlign = false;
   boolean debug = false;
-  boolean forceSplit = false;
   
   String source;
 
@@ -80,7 +80,8 @@ class DiabloMiner {
   int currentAttempts = 1;
   
   final static int EXECUTION_TOTAL = 3;
-
+  final static long TIME_OFFSET = 15000;
+  
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
     
@@ -101,7 +102,6 @@ class DiabloMiner {
     options.addOption("p", "port", true," bitcoin host port");
     options.addOption("a", "bitalign", false, "force bitalign on for Radeon 5xxx + ATI SDK 2.1");
     options.addOption("d", "debug", false, "enable extra debug output");
-    options.addOption("s", "split", false, "enable payload split, faster on Radeon 4xxx");
     options.addOption("h", "help", false, "this help");
     
     Option option = OptionBuilder.create('u');
@@ -165,9 +165,6 @@ class DiabloMiner {
     if(line.hasOption("debug"))
       debug = true;
     
-    if(line.hasOption("split"))
-      forceSplit = true;
-    
     if(line.hasOption("host"))
       ip = line.getOptionValue("host");
     
@@ -198,11 +195,17 @@ class DiabloMiner {
         deviceStates.add(this.new DeviceState(platform, device));
     }
     
-    long then = startTime = System.nanoTime() / 1000000;
-    now.set((long) then);
+    long previousCount = 0;
+    long averageStartTime = startTime = System.nanoTime() / 1000000;
+    now.set((long) startTime);
 
-    for(int i = 0; i < deviceStates.size(); i++)
+    for(int i = 0; i < deviceStates.size(); i++) {
+      for(int j = 0; j < EXECUTION_TOTAL; j++)
+        deviceStates.get(i).executions[j].threadStartTime = 
+          deviceStates.get(i).executions[j].lastTime = now.get();
+      
       deviceStates.get(i).checkDevice();
+    }
     
     System.out.println("Started at " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM).format(new Date()));
     
@@ -214,19 +217,22 @@ class DiabloMiner {
       for(int i = 0; i < deviceStates.size(); i++)
         deviceStates.get(i).checkDevice();
             
-      if(now.get() - startTime > 10000) {
-        long adjustedCount = hashCount.get() / ((now.get() - startTime) / 1000) / 1000;
-        System.out.print("\r" + adjustedCount + " khash/sec");
-        then = now.get();
+      long adjustedCount = hashCount.get() / (now.get() - averageStartTime);
+      
+      if(now.get() - startTime > TIME_OFFSET) {
+        long averageCount = (adjustedCount + previousCount) / 2;
+        System.out.print("\r" + averageCount + " khash/sec");
+      }
+      
+      if(now.get() - TIME_OFFSET > averageStartTime) {
+        previousCount = adjustedCount;
+        averageStartTime = now.get();
+        hashCount.set(0);
       }
       
       try {
-        if(now.get() - startTime < 5000) {
+        if(now.get() - startTime < TIME_OFFSET) {
           Thread.sleep(1);
-          
-          if(now.get() - startTime < 100) {
-            hashCount.set(0);
-          }
         } else {
           Thread.sleep(1000);
         }
@@ -262,11 +268,10 @@ class DiabloMiner {
  
     final CLDevice device;
     final CLContext context;
+    final long maxMem;
 
     final CLProgram program;
-    final CLKernel kernel0;
-    final CLKernel kernel1;
-    final CLKernel kernel2;
+    final CLKernel kernel;
 
     long workSize;
     long workSizeMax;
@@ -290,6 +295,7 @@ class DiabloMiner {
       deviceName = device.getInfoString(CL10.CL_DEVICE_NAME);
       int deviceCU = device.getInfoInt(CL10.CL_DEVICE_MAX_COMPUTE_UNITS);
       long deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
+      maxMem = device.getInfoLong(CL10.CL_DEVICE_MAX_MEM_ALLOC_SIZE) / 4 / 8;
       
       if(forceVectorWidth == 0)
         //vectorWidth = device.getInfoInt(CL10.CL_DEVICE_PREFERRED_VECTOR_WIDTH_);
@@ -302,7 +308,7 @@ class DiabloMiner {
       
       context = CL10.clCreateContext(properties, device, new CLContextCallback() {
         protected void handleMessage(String errinfo, ByteBuffer private_info) {
-          System.out.println("ERROR: " + errinfo);
+          System.err.println("\nERROR: " + errinfo);
         }
       }, null);
       
@@ -362,38 +368,16 @@ class DiabloMiner {
         throw new Exception("Failed to build program on " + deviceName);
       }
 
-      if(!forceSplit) {
-        kernel0 = CL10.clCreateKernel(program, "search0", null);
-        if(kernel0 == null) {
-          System.out.println();
-          throw new Exception("Failed to create kernel on " + deviceName);
-        }
-        
-        kernel1 = null;
-        kernel2 = null;
-      } else {
-        kernel0 = null;
-        
-        kernel1 = CL10.clCreateKernel(program, "search1", null);
-        if(kernel1 == null) {
-          System.out.println();
-          throw new Exception("Failed to create first kernel on " + deviceName);
-        }
-      
-        kernel2 = CL10.clCreateKernel(program, "search2", null);
-        if(kernel2 == null) {
-          System.out.println();
-          throw new Exception("Failed to create second kernel on " + deviceName);
-        }
+      kernel = CL10.clCreateKernel(program, "search", null);
+      if(kernel == null) {
+        System.out.println();
+        throw new Exception("Failed to create kernel on " + deviceName);
       }
       
       if(forceWorkSize == 0) {
         ByteBuffer rkwgs = BufferUtils.createByteBuffer(8);
-        
-        if(!forceSplit)
-          err = CL10.clGetKernelWorkGroupInfo(kernel0, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
-        else
-          err = CL10.clGetKernelWorkGroupInfo(kernel1, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
+
+        err = CL10.clGetKernelWorkGroupInfo(kernel, device, CL10.CL_KERNEL_WORK_GROUP_SIZE, rkwgs, null);
         
         localWorkSize.put(0, rkwgs.getLong(0));
       
@@ -406,11 +390,8 @@ class DiabloMiner {
       System.out.println(localWorkSize.get(0) + ")");
       
       workSizeBase = localWorkSize.get(0) * deviceCU;
-      
-      if(!forceSplit)
-        workSizeMax = (long) (Math.pow(2, 32) - 1);
-      else
-        workSizeMax = 16*1024*1024 / 4 / vectorWidth;
+
+      workSizeMax = (long) (Math.pow(2, 32) - 1);
       
       workSize = workSizeBase * workSizeBase;
 
@@ -418,31 +399,44 @@ class DiabloMiner {
       
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
-        Thread executionThread = new Thread(executions[i]);
-        executionThread.start();
+        new Thread(executions[i]).start();
       }
     }
     
-    void checkDevice() {
+    void checkDevice() throws NoSuchAlgorithmException {
       long elapsed = now.get() - startTime;
       
       if(runs.get() > (runsThen.get() + targetFPS)) {
-        long basis = elapsed / runs.get();
+        float basis = elapsed / runs.get();
+        float targetBasis = 1000 / targetFPS;
         
-        if(basis < 1000 / targetFPS * 2 && workSizeMax > workSize + (workSizeBase * workSizeBase))
+        if(basis < targetBasis / 2 && workSizeMax > workSize + (workSizeBase * workSizeBase))
           workSize += (workSizeBase * workSizeBase);
-        else if(basis < 1000 / targetFPS && workSizeMax > workSize + workSizeBase)
+        else if(basis < targetBasis && workSizeMax > workSize + workSizeBase)
           workSize += workSizeBase;
-        else if(basis > 1000 / targetFPS / 2 && workSize > (workSizeBase * workSizeBase) + workSizeBase)
+        else if(basis > targetBasis * 2 && workSize > (workSizeBase * workSizeBase) + workSizeBase)
           workSize -= (workSizeBase * workSizeBase);
-        else if(basis > 1000 / targetFPS && workSize > workSizeBase * 2)
+        else if(basis > targetBasis && workSize > workSizeBase + workSizeBase)
           workSize -= workSizeBase;
         
         runsThen.set(runs.get());
       }
+      
+      for(int i = 0; i < EXECUTION_TOTAL; i++) {
+        if((executions[i].threadStartTime + TIME_OFFSET < now.get()) && (executions[i].lastTime  + TIME_OFFSET < now.get())) {
+          System.err.println("\rERROR: Executor on " + deviceName + " locked up, restarting it");
+          
+          executions[i].threadRunning = false;
+          
+          executions[i] = this.new ExecutionState();
+          new Thread(executions[i]).start();
+        }
+      }
     }
 
     class ExecutionState implements Runnable {
+      boolean threadRunning = true;
+      
       CLCommandQueue queue;
       
       final ByteBuffer buffer;
@@ -462,28 +456,39 @@ class DiabloMiner {
       
       long base;
       
+      long threadStartTime;
+      long lastTime;
+      
+      IntBuffer errBuf = BufferUtils.createIntBuffer(1);
+      
       ExecutionState() throws NoSuchAlgorithmException {
         buffer = BufferUtils.createByteBuffer(vectorWidth * 4);
         
         for(int i = 0; i < vectorWidth; i++)
           buffer.putInt(i*4, 0);
         
-        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, vectorWidth * 4, null);
+        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, vectorWidth * 4, errBuf);
         
-        if(forceSplit)
-          for(int i = 0; i < 8; i++)
-            store[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_READ_WRITE, 16*1024*1024, null);
-        
+        if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
+          running = false;
+          System.err.println("\rERROR: Failed to allocate output buffer");
+        }
+
         currentWork = new GetWorkParser();
-        currentWork.lastPull = now.get();
+        threadStartTime = lastTime = currentWork.lastPull = now.get();
       }
       
       public void run() {
-        queue = CL10.clCreateCommandQueue(context, device, 0, null);
+        queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);
+        
+        if(queue == null || errBuf.get(0) != CL10.CL_SUCCESS) {
+          running = false;
+          System.err.println("\rERROR: Failed to allocate queue");
+        }
         
         CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
         
-        while(running == true) {       
+        while(running == true && threadRunning == true) {       
           boolean reset = false;
           
           for(int i = 0; i < vectorWidth; i++) {
@@ -541,98 +546,46 @@ class DiabloMiner {
           workSizeTemp.put(0, workSize);
           int err = 0;
 
-          if(!forceSplit) {
-            kernel0.setArg(0, currentWork.block[16])
-                   .setArg(1, currentWork.block[17])
-                   .setArg(2, currentWork.block[18])
-                   .setArg(3, currentWork.state[0])
-                   .setArg(4, currentWork.state[1])
-                   .setArg(5, currentWork.state[2])
-                   .setArg(6, currentWork.state[3])
-                   .setArg(7, currentWork.state[4])
-                   .setArg(8, currentWork.state[5])
-                   .setArg(9, currentWork.state[6])
-                   .setArg(10, currentWork.state[7])
-                   .setArg(11, state2[1])
-                   .setArg(12, state2[2])
-                   .setArg(13, state2[3])
-                   .setArg(14, state2[5])
-                   .setArg(15, state2[6])
-                   .setArg(16, state2[7])
-                   .setArg(17, offset)
-                   .setArg(18, output);
-
-            err = CL10.clEnqueueNDRangeKernel(queue, kernel0, 1, null, workSizeTemp, localWorkSize, null, null);
+          kernel.setArg(0, currentWork.block[16])
+                .setArg(1, currentWork.block[17])
+                .setArg(2, currentWork.block[18])
+                .setArg(3, currentWork.state[0])
+                .setArg(4, currentWork.state[1])
+                .setArg(5, currentWork.state[2])
+                .setArg(6, currentWork.state[3])
+                .setArg(7, currentWork.state[4])
+                .setArg(8, currentWork.state[5])
+                .setArg(9, currentWork.state[6])
+                .setArg(10, currentWork.state[7])
+                .setArg(11, state2[1])
+                .setArg(12, state2[2])
+                .setArg(13, state2[3])
+                .setArg(14, state2[5])
+                .setArg(15, state2[6])
+                .setArg(16, state2[7])
+                .setArg(17, offset)
+                .setArg(18, output);
+        
+          err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
             
-            if(err !=  CL10.CL_SUCCESS) {
-              System.out.println();
-              System.err.println("Did not queue kernel, error " + err);
-              running = false;
-            }              
-          } else {
-            kernel1.setArg(0, currentWork.block[16])
-                   .setArg(1, currentWork.block[17])
-                   .setArg(2, currentWork.block[18])
-                   .setArg(3, currentWork.state[0])
-                   .setArg(4, currentWork.state[4])
-                   .setArg(5, state2[1])
-                   .setArg(6, state2[2])
-                   .setArg(7, state2[3])
-                   .setArg(8, state2[5])
-                   .setArg(9, state2[6])
-                   .setArg(10, state2[7])
-                   .setArg(11, offset)
-                   .setArg(12, store[0])
-                   .setArg(13, store[1])
-                   .setArg(14, store[2])
-                   .setArg(15, store[3])
-                   .setArg(16, store[4])
-                   .setArg(17, store[5])
-                   .setArg(18, store[6])
-                   .setArg(19, store[7]);
-
-            err = CL10.clEnqueueNDRangeKernel(queue, kernel1, 1, null, workSizeTemp, localWorkSize, null, null);
-          
-            if(err !=  CL10.CL_SUCCESS) {
-              System.out.println();
-              System.err.println("Did not queue kernel, error " + err);
-              running = false;
-            }    
-            
-            kernel2.setArg(0, currentWork.state[0])
-                   .setArg(1, currentWork.state[1])
-                   .setArg(2, currentWork.state[2])
-                   .setArg(3, currentWork.state[3])
-                   .setArg(4, currentWork.state[4])
-                   .setArg(5, currentWork.state[5])
-                   .setArg(6, currentWork.state[6])
-                   .setArg(7, currentWork.state[7])
-                   .setArg(8, offset)
-                   .setArg(9, output)
-                   .setArg(10, store[0])
-                   .setArg(11, store[1])
-                   .setArg(12, store[2])
-                   .setArg(13, store[3])
-                   .setArg(14, store[4])
-                   .setArg(15, store[5])
-                   .setArg(16, store[6])
-                   .setArg(17, store[7]);
-          
-            err = CL10.clEnqueueNDRangeKernel(queue, kernel2, 1, null, workSizeTemp, localWorkSize, null, null);
-            
-            if(err !=  CL10.CL_SUCCESS) {
-              System.out.println();
-              System.err.println("Did not queue kernel, erorr " + err);
-              running = false;
-            }    
-          }
+          if(err !=  CL10.CL_SUCCESS) {
+            System.err.println("\rERROR: Failed to queue kernel, error " + err);
+            running = false;
+          }              
           
           hashCount.addAndGet(workSizeTemp.get(0) * vectorWidth);
           base += workSizeTemp.get(0);
           runs.incrementAndGet();
+          lastTime = now.get();
           
           CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
         }
+        
+        CL10.clFinish(queue);
+                
+        CL10.clReleaseCommandQueue(queue);
+        
+        CL10.clReleaseMemObject(output);
       }
     }
   }
@@ -661,7 +614,7 @@ class DiabloMiner {
       try {
         parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
       } catch(IOException e) {
-        System.out.println("\rCan't connect to Bitcoin: " + e.getLocalizedMessage());
+        System.err.println("\rERROR: Can't connect to Bitcoin: " + e.getLocalizedMessage());
       }
     }
     
@@ -678,7 +631,7 @@ class DiabloMiner {
       try {
         parse(doJSONRPC(bitcoind, userPass, mapper, sendworkMessage));
       } catch(IOException e) {
-        System.out.println("\rCan't connect to Bitcoin: " + e.getLocalizedMessage());
+        System.err.println("\rERROR: Can't connect to Bitcoin: " + e.getLocalizedMessage());
       }
     }
     
