@@ -43,6 +43,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.codec.binary.Base64;
+import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.ObjectNode;
@@ -268,7 +269,6 @@ class DiabloMiner {
  
     final CLDevice device;
     final CLContext context;
-    final long maxMem;
 
     final CLProgram program;
     final CLKernel kernel;
@@ -295,7 +295,6 @@ class DiabloMiner {
       deviceName = device.getInfoString(CL10.CL_DEVICE_NAME);
       int deviceCU = device.getInfoInt(CL10.CL_DEVICE_MAX_COMPUTE_UNITS);
       long deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
-      maxMem = device.getInfoLong(CL10.CL_DEVICE_MAX_MEM_ALLOC_SIZE) / 4 / 8;
       
       if(forceVectorWidth == 0)
         //vectorWidth = device.getInfoInt(CL10.CL_DEVICE_PREFERRED_VECTOR_WIDTH_);
@@ -445,7 +444,7 @@ class DiabloMiner {
       
       final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
       
-      final int[] state2 = new int[16];    
+      final int[] midstate2 = new int[16];    
       
       final MessageDigest digestInside = MessageDigest.getInstance("SHA-256");
       final MessageDigest digestOutside = MessageDigest.getInstance("SHA-256");
@@ -494,7 +493,7 @@ class DiabloMiner {
           for(int i = 0; i < vectorWidth; i++) {
             if(buffer.getInt(i*4) > 0) {     
               for(int j = 0; j < 19; j++)
-                digestInput.putInt(j*4, currentWork.block[j]);
+                digestInput.putInt(j*4, currentWork.data[j]);
               
               digestInput.putInt(19*4, buffer.getInt(i*4));
 
@@ -521,20 +520,25 @@ class DiabloMiner {
                   System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
                       DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
               
-                  currentWork.sendWork(buffer.getInt(i*4));
+                  if(!currentWork.sendWork(buffer.getInt(i*4)))
+                    System.err.println("\rERROR: Invalid block sent to Bitcoin at " +
+                        DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()) +
+                        ", possible miner bug");
+                    
                   currentWork.lastPull = now.get();
                   base = 0;
               
                   currentBlocks++;
                 } else {
-                  System.err.println("\rInvalid block found on " + deviceName + " at " +
+                  System.err.println("\rERROR: Invalid block found on " + deviceName + " at " +
                       DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()) +
-                      ", possible driver or hardware issue\n");
+                      ", possible driver or hardware issue");
                 }
               }
               
               buffer.putInt(i*4, 0);
               reset = true;
+              currentWork.lastPull = 0;
             }
           }
           
@@ -547,33 +551,33 @@ class DiabloMiner {
             base = 0;
           }
         
-          System.arraycopy(currentWork.state, 0, state2, 0, 8);
+          System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
         
-          sharound(state2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.block[16], 0x428A2F98);
-          sharound(state2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.block[17], 0x71374491);
-          sharound(state2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.block[18], 0xB5C0FBCF);
+          sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.data[16], 0x428A2F98);
+          sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.data[17], 0x71374491);
+          sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.data[18], 0xB5C0FBCF);
         
           int offset = (int)base;
           workSizeTemp.put(0, workSize);
           int err = 0;
 
-          kernel.setArg(0, currentWork.block[16])
-                .setArg(1, currentWork.block[17])
-                .setArg(2, currentWork.block[18])
-                .setArg(3, currentWork.state[0])
-                .setArg(4, currentWork.state[1])
-                .setArg(5, currentWork.state[2])
-                .setArg(6, currentWork.state[3])
-                .setArg(7, currentWork.state[4])
-                .setArg(8, currentWork.state[5])
-                .setArg(9, currentWork.state[6])
-                .setArg(10, currentWork.state[7])
-                .setArg(11, state2[1])
-                .setArg(12, state2[2])
-                .setArg(13, state2[3])
-                .setArg(14, state2[5])
-                .setArg(15, state2[6])
-                .setArg(16, state2[7])
+          kernel.setArg(0, currentWork.data[16])
+                .setArg(1, currentWork.data[17])
+                .setArg(2, currentWork.data[18])
+                .setArg(3, currentWork.midstate[0])
+                .setArg(4, currentWork.midstate[1])
+                .setArg(5, currentWork.midstate[2])
+                .setArg(6, currentWork.midstate[3])
+                .setArg(7, currentWork.midstate[4])
+                .setArg(8, currentWork.midstate[5])
+                .setArg(9, currentWork.midstate[6])
+                .setArg(10, currentWork.midstate[7])
+                .setArg(11, midstate2[1])
+                .setArg(12, midstate2[2])
+                .setArg(13, midstate2[3])
+                .setArg(14, midstate2[5])
+                .setArg(15, midstate2[6])
+                .setArg(16, midstate2[7])
                 .setArg(17, offset)
                 .setArg(18, output);
         
@@ -602,10 +606,9 @@ class DiabloMiner {
   }
   
   class GetWorkParser {
-    final int[] block = new int[32];
-    final int[] state = new int[8];
+    final int[] data = new int[32];
+    final int[] midstate = new int[8];
     final long[] target = new long[8];
-    int extraNonce = 0;
     
     final ObjectMapper mapper = new ObjectMapper();
     final ObjectNode getworkMessage;
@@ -629,37 +632,36 @@ class DiabloMiner {
       }
     }
     
-    void sendWork(int nonce) {
-      block[19] = nonce;
+    boolean sendWork(int nonce) {
+      data[19] = nonce;
       
       ObjectNode sendworkMessage = mapper.createObjectNode();
       sendworkMessage.put("method", "getwork");
       ArrayNode params = sendworkMessage.putArray("params");
-      params.add(extraNonce);
       params.add(encodeBlock());
       sendworkMessage.put("id", 1);             
-
+      
       try {
-        parse(doJSONRPC(bitcoind, userPass, mapper, sendworkMessage));
+        return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
       } catch(IOException e) {
         System.err.println("\rERROR: Can't connect to Bitcoin: " + e.getLocalizedMessage());
+        return false;
       }
     }
     
-    ObjectNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage)
-        throws IOException {
+    JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
       HttpURLConnection connection = (HttpURLConnection) bitcoind.openConnection();
       connection.setRequestProperty("Authorization", userPassword);
       connection.setDoOutput(true);
-      
+
       OutputStream requestStream = connection.getOutputStream();
       Writer request = new OutputStreamWriter(requestStream);
       request.write(requestMessage.toString());
       request.close();
       requestStream.close();
-      
+
       ObjectNode responseMessage = null;
-      
+
       try {
         InputStream response = connection.getInputStream();
         responseMessage = (ObjectNode) mapper.readTree(response);
@@ -668,32 +670,31 @@ class DiabloMiner {
         InputStream errorStream = connection.getErrorStream();
         byte[] error = new byte[1024];
         errorStream.read(error);
-        
+
         IOException e2 = new IOException("Failed to communicate with bitcoind: " + new String(error).trim());
         e2.setStackTrace(e.getStackTrace());
-        
+
         throw e2;
       }
-      
+
       connection.disconnect();
-      
-      return (ObjectNode) responseMessage.get("result");
+
+      return responseMessage.get("result");
     }
     
-    void parse(ObjectNode responseMessage) {
-      String blocks = responseMessage.get("block").getValueAsText();
-      String states = responseMessage.get("state").getValueAsText();
+    void parse(JsonNode responseMessage) {
+      String datas = responseMessage.get("data").getValueAsText();
+      String midstates = responseMessage.get("midstate").getValueAsText();
       String targets = responseMessage.get("target").getValueAsText();
-      extraNonce = responseMessage.get("extraNonce").getValueAsInt();
       
-      for(int i = 0; i < block.length; i++) {
-        String parse = blocks.substring(i*8, (i*8)+8);
-        block[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
+      for(int i = 0; i < data.length; i++) {
+        String parse = datas.substring(i*8, (i*8)+8);
+        data[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
       }
 
-      for(int i = 0; i < state.length; i++) {
-        String parse = states.substring(i*8, (i*8)+8);
-        state[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
+      for(int i = 0; i < midstate.length; i++) {
+        String parse = midstates.substring(i*8, (i*8)+8);
+        midstate[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
       }
       
       for(int i = 0; i < target.length; i++) {
@@ -705,8 +706,8 @@ class DiabloMiner {
     String encodeBlock() {
       StringBuilder builder = new StringBuilder();
       
-      for(int b : block)
-        builder.append(String.format("%08x", Integer.reverseBytes(b)));
+      for(int d : data)
+        builder.append(String.format("%08x", Integer.reverseBytes(d)));
       
       return builder.toString();
     }
