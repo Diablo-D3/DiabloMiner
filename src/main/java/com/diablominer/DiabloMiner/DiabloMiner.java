@@ -505,6 +505,11 @@ class DiabloMiner {
                   (0x000000FF & ((int)digestOutput[25])) << 8 | 
                   (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
               
+              long H = ((long)((0x000000FF & ((int)digestOutput[31])) << 24 | 
+                  (0x000000FF & ((int)digestOutput[30])) << 16 |
+                  (0x000000FF & ((int)digestOutput[29])) << 8 | 
+                  (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
+              
               if(debug) {
                 System.out.println("\rAttempt " + currentAttempts + " found on " + deviceName + " at " +
                     DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
@@ -512,14 +517,20 @@ class DiabloMiner {
               }
               
               if(G <= currentWork.target[6]) {
-                System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
-                    DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+                if(H == 0) {
+                  System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
+                      DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
               
-                currentWork.sendWork(buffer.getInt(i*4));
-                currentWork.lastPull = now.get();
-                base = 0;
+                  currentWork.sendWork(buffer.getInt(i*4));
+                  currentWork.lastPull = now.get();
+                  base = 0;
               
-                currentBlocks++;
+                  currentBlocks++;
+                } else {
+                  System.err.println("\rInvalid block found on " + deviceName + " at " +
+                      DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()) +
+                      ", possible driver or hardware issue\n");
+                }
               }
               
               buffer.putInt(i*4, 0);
