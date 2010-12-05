@@ -550,7 +550,7 @@ class DiabloMiner {
           }
           
           if(reset)
-            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
           
           if(currentWork.lastPull + 5000 < now.get() || base > (Math.pow(2, 32) / vectorWidth)) {
             currentWork.getWork();
@@ -587,17 +587,22 @@ class DiabloMiner {
                 .setArg(16, midstate2[7])
                 .setArg(17, offset)
                 .setArg(18, output);
-        
+          
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
             
           if(err !=  CL10.CL_SUCCESS) {
-            System.err.println("\rERROR: Failed to queue kernel, error " + err);
-            running = false;
-          }              
+            if(err != CL10.CL_INVALID_KERNEL_ARGS) {
+              System.err.println("\rERROR: Failed to queue kernel, error " + err);
+              running = false;
+            } else {
+              System.out.println("\rDEBUG: Spurious CL_INVALID_KERNEL_ARGS, ignoring");
+            }
+          } else {                  
+            hashCount.addAndGet(workSizeTemp.get(0) * vectorWidth);
+            base += workSizeTemp.get(0);
+            runs.incrementAndGet();
+          }
           
-          hashCount.addAndGet(workSizeTemp.get(0) * vectorWidth);
-          base += workSizeTemp.get(0);
-          runs.incrementAndGet();
           lastTime = now.get();
           
           CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
