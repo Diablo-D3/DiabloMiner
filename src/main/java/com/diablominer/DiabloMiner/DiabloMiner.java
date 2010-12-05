@@ -101,7 +101,7 @@ class DiabloMiner {
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("v", "vectorwidth", true, "override vector width");
     options.addOption("o", "host", true, "bitcoin host IP");
-    options.addOption("p", "port", true," bitcoin host port");
+    options.addOption("r", "port", true," bitcoin host port");
     options.addOption("a", "bitalign", false, "force bitalign on for Radeon 5xxx + ATI SDK 2.1");
     options.addOption("d", "debug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
