@@ -192,7 +192,7 @@ class DiabloMiner {
     int count = 1;
     
     for(CLPlatform platform : platforms) {         
-      List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_CPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
+      List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
         
       for (CLDevice device : devices) {
         deviceStates.add(this.new DeviceState(platform, device, count));
