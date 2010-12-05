@@ -188,12 +188,16 @@ class DiabloMiner {
       
     if(platforms == null)
       throw new Exception("No OpenCL platforms found.");
-        
+  
+    int count = 1;
+    
     for(CLPlatform platform : platforms) {         
       List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
         
-      for (CLDevice device : devices)
-        deviceStates.add(this.new DeviceState(platform, device));
+      for (CLDevice device : devices) {
+        deviceStates.add(this.new DeviceState(platform, device, count));
+        count++;
+      }
     }
     
     long previousCount = 0;
@@ -285,14 +289,14 @@ class DiabloMiner {
     AtomicLong runs = new AtomicLong(0);
     AtomicLong runsThen = new AtomicLong(0);
     
-    DeviceState(CLPlatform platform, CLDevice device) throws Exception {
+    DeviceState(CLPlatform platform, CLDevice device, int count) throws Exception {
       this.device = device;
       
       PointerBuffer properties = BufferUtils.createPointerBuffer(3);
       properties.put(CL10.CL_CONTEXT_PLATFORM).put(platform.getPointer()).put(0).flip();
       int err = 0;
       
-      deviceName = device.getInfoString(CL10.CL_DEVICE_NAME);
+      deviceName = device.getInfoString(CL10.CL_DEVICE_NAME) + " (#" + count + ")";
       int deviceCU = device.getInfoInt(CL10.CL_DEVICE_MAX_COMPUTE_UNITS);
       long deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
       
