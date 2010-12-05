@@ -595,7 +595,8 @@ class DiabloMiner {
               System.err.println("\rERROR: Failed to queue kernel, error " + err);
               running = false;
             } else {
-              System.out.println("\rDEBUG: Spurious CL_INVALID_KERNEL_ARGS, ignoring");
+              if(debug)
+                System.out.println("\rDEBUG: Spurious CL_INVALID_KERNEL_ARGS, ignoring");
             }
           } else {                  
             hashCount.addAndGet(workSizeTemp.get(0) * vectorWidth);
