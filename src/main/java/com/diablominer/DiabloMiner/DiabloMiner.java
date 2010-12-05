@@ -75,6 +75,7 @@ class DiabloMiner {
   
   AtomicLong hashCount = new AtomicLong(0);
   
+  List<DeviceState> deviceStates = new ArrayList<DeviceState>();
   long startTime;
   AtomicLong now = new AtomicLong(0);
   int currentBlocks = 1;
@@ -184,7 +185,6 @@ class DiabloMiner {
     CL.create();
 
     List<CLPlatform> platforms = CLPlatform.getPlatforms();
-    List<DeviceState> deviceStates = new ArrayList<DeviceState>();
       
     if(platforms == null)
       throw new Exception("No OpenCL platforms found.");
@@ -192,7 +192,7 @@ class DiabloMiner {
     int count = 1;
     
     for(CLPlatform platform : platforms) {         
-      List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
+      List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_CPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
         
       for (CLDevice device : devices) {
         deviceStates.add(this.new DeviceState(platform, device, count));
@@ -514,20 +514,20 @@ class DiabloMiner {
                   (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
               
               if(debug) {
-                System.out.println("\rAttempt " + currentAttempts + " found on " + deviceName + " at " +
+                System.out.println("\rDEBUG: Attempt " + currentAttempts + " found on " + deviceName + " at " +
                     DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
                 currentAttempts++;
               }
               
               if(G <= currentWork.target[6]) {
                 if(H == 0) {
-                  System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
-                      DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
-              
-                  if(!currentWork.sendWork(buffer.getInt(i*4)))
-                    System.err.println("\rERROR: Invalid block sent to Bitcoin at " +
-                        DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()) +
-                        ", possible miner bug");
+                  if(currentWork.sendWork(buffer.getInt(i*4)))
+                    System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
+                        DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+                  else
+                    if(debug)
+                      System.out.println("\rDEBUG: Block found, but rejected by Bitcoin,  on " + deviceName +
+                          " at " + DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
                     
                   currentWork.lastPull = now.get();
                   base = 0;
@@ -542,7 +542,13 @@ class DiabloMiner {
               
               buffer.putInt(i*4, 0);
               reset = true;
-              currentWork.lastPull = 0;
+              
+              for(int j = 0; i < deviceStates.size(); j++) {
+                DeviceState device = deviceStates.get(i);
+                
+                for(int k = 0; k < EXECUTION_TOTAL; k++)
+                  device.executions[k].currentWork.lastPull = 0;
+              }
             }
           }
           
