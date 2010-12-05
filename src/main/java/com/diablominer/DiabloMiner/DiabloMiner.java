@@ -528,10 +528,15 @@ class DiabloMiner {
                     if(debug)
                       System.out.println("\rDEBUG: Block found, but rejected by Bitcoin,  on " + deviceName +
                           " at " + DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+                  
+                  for(int j = 0; i < deviceStates.size(); j++) {
+                    DeviceState device = deviceStates.get(i);
                     
-                  currentWork.lastPull = now.get();
-                  base = 0;
-              
+                    for(int k = 0; k < EXECUTION_TOTAL; k++)
+                      device.executions[k].currentWork.lastPull = 0;
+                  }
+                  
+                  base = 0;              
                   currentBlocks++;
                 } else {
                   System.err.println("\rERROR: Invalid block found on " + deviceName + " at " +
@@ -542,13 +547,6 @@ class DiabloMiner {
               
               buffer.putInt(i*4, 0);
               reset = true;
-              
-              for(int j = 0; i < deviceStates.size(); j++) {
-                DeviceState device = deviceStates.get(i);
-                
-                for(int k = 0; k < EXECUTION_TOTAL; k++)
-                  device.executions[k].currentWork.lastPull = 0;
-              }
             }
           }
           
