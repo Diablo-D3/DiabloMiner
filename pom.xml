@@ -20,7 +20,7 @@
 		<repository>
 			<id>lwjgl-local</id>
 			<name>lwjgl local</name>
-			<url>file:{$basedir}/contrib/lwjgl</url>
+			<url>file:${basedir}/contrib/lwjgl</url>
 		</repository>
 	</repositories>
 	<dependencies>
