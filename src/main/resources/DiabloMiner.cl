@@ -1,26 +1,20 @@
-#if VECTORS == 2
-typedef uint2 u;
-#elif VECTORS == 4
-typedef uint4 u;
-#elif VECTORS == 8
-typedef uint8 u;
-#elif VECTORS == 16
-typedef uint16 u;
-#else
-typedef uint u;
-#endif
-
 #if FORCEBITALIGN
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
-#define rot(x,y) amd_bitalign(x, x, (u)(32-y))
+#define rot(x,y) amd_bitalign(x, x, (uint)(32-y))
 #else
-#define rot(x, y) rotate(x, (u)y)
+#define rot(x, y) rotate(x, (uint)y)
 #endif
 
-#define R(x) (work[x] = (rot(work[x-2],15)^rot(work[x-2],13)^((work[x-2])>>(u)10)) + work[x-7] + (rot(work[x-15],25)^rot(work[x-15],14)^((work[x-15])>>(u)3)) + work[x-16])
-#define sharound(a,b,c,d,e,f,g,h,x,K) {h=(h+(rot(e, 26)^rot(e, 21)^rot(e, 7))+(g^(e&(f^g)))+(u)K+x); t1=(rot(a, 30)^rot(a, 19)^rot(a, 10))+((a&b)|(c&(a|b))); d+=h; h+=t1;}
+#if WORKGROUPSIZE
+#define WGS __attribute__((reqd_work_group_size(WORKGROUPSIZE, 1, 1)))
+#else
+#define WGS
+#endif
 
-__kernel __attribute__((vec_type_hint(u))) WORKGROUPSIZE void search(
+#define R(x) (work[x] = (rot(work[x-2],15)^rot(work[x-2],13)^((work[x-2])>>(uint)10)) + work[x-7] + (rot(work[x-15],25)^rot(work[x-15],14)^((work[x-15])>>(uint)3)) + work[x-16])
+#define sharound(a,b,c,d,e,f,g,h,x,K) {h=(h+(rot(e, 26)^rot(e, 21)^rot(e, 7))+(g^(e&(f^g)))+(uint)K+x); t1=(rot(a, 30)^rot(a, 19)^rot(a, 10))+((a&b)|(c&(a|b))); d+=h; h+=t1;}
+
+__kernel __attribute__((vec_type_hint(uint))) WGS void search(
     const uint block0, const uint block1, const uint block2,
     const uint state0, const uint state1, const uint state2, const uint state3,
     const uint state4, const uint state5, const uint state6, const uint state7,
@@ -30,11 +24,10 @@ __kernel __attribute__((vec_type_hint(u))) WORKGROUPSIZE void search(
     __global uint * output)
 {
   uint nonce = base + get_global_id(0);
-  u ns = NS;
 
-  u work[64];
-  u A,B,C,D,E,F,G,H;
-  u t1;
+  uint work[64];
+  uint A,B,C,D,E,F,G,H;
+  uint t1;
 
   A=state0;
   B=B1;
@@ -48,7 +41,7 @@ __kernel __attribute__((vec_type_hint(u))) WORKGROUPSIZE void search(
   work[0]=block0;
   work[1]=block1;
   work[2]=block2;
-  work[3]=ns;
+  work[3]=nonce;
   work[4]=0x80000000;
   work[5]=0x00000000;
   work[6]=0x00000000;
@@ -222,8 +215,10 @@ __kernel __attribute__((vec_type_hint(u))) WORKGROUPSIZE void search(
   //sharound(C,D,E,F,G,H,A,B,R(62),0xBEF9A3F7);
   //sharound(B,C,D,E,F,G,H,A,R(63),0xC67178F2);
 
-  H += (u)0x5be0cd19;
+  H += (uint)0x5be0cd19;
 
-  CHECKOUTPUT
+  if(H == 0) {
+    output[0] = nonce;
+  }
 }
 // end

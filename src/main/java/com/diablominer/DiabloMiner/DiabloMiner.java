@@ -65,7 +65,6 @@ class DiabloMiner {
   String userPass;
   float targetFPS = 60;
   int forceWorkSize = 0;
-  int forceVectorWidth = 0;
   boolean forceBitAlign = false;
   boolean debug = false;
   
@@ -99,7 +98,6 @@ class DiabloMiner {
     Options options = new Options();
     options.addOption("f", "fps", true, "target execution timing");
     options.addOption("w", "worksize", true, "override worksize");
-    options.addOption("v", "vectorwidth", true, "override vector width");
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true," bitcoin host port");
     options.addOption("a", "bitalign", false, "force bitalign on for Radeon 5xxx + ATI SDK 2.1");
@@ -150,16 +148,6 @@ class DiabloMiner {
     
     if(line.hasOption("worksize"))
       forceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
-    
-    if(line.hasOption("vectorwidth")) {
-      forceVectorWidth = Integer.parseInt(line.getOptionValue("vectorwidth"));
-      
-      if(!(forceVectorWidth == 1 || forceVectorWidth == 2 || forceVectorWidth == 4 ||
-          forceVectorWidth == 8 || forceVectorWidth == 16)) {
-        System.err.println("Error: Vector width must be 1, 2, 4, 8, or 16");
-        System.exit(0);
-      }
-    }
 
     if(line.hasOption("bitalign"))
       forceBitAlign = true;
@@ -281,8 +269,6 @@ class DiabloMiner {
     long workSizeMax;
     long workSizeBase;
     final PointerBuffer localWorkSize = BufferUtils.createPointerBuffer(1);
-
-    final int vectorWidth;
     
     final ExecutionState executions[];
         
@@ -299,60 +285,22 @@ class DiabloMiner {
       deviceName = device.getInfoString(CL10.CL_DEVICE_NAME) + " (#" + count + ")";
       int deviceCU = device.getInfoInt(CL10.CL_DEVICE_MAX_COMPUTE_UNITS);
       long deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
-      
-      if(forceVectorWidth == 0)
-        //vectorWidth = device.getInfoInt(CL10.CL_DEVICE_PREFERRED_VECTOR_WIDTH_);
-        vectorWidth = 1;
-      else
-        vectorWidth = forceVectorWidth;
 
-      System.out.print("Added " + deviceName + " (" + deviceCU + " CU, " + vectorWidth +
-          "x vector, local work size of ");
+      System.out.print("Added " + deviceName + " (" + deviceCU + " CU, local work size of ");
       
       context = CL10.clCreateContext(properties, device, new CLContextCallback() {
         protected void handleMessage(String errinfo, ByteBuffer private_info) {
           System.err.println("\nERROR: " + errinfo);
         }
       }, null);
-      
-      String compileOptions = "-D VECTORS=" + vectorWidth;
-      
-      String ns;
-      String checkOutput = "";
 
-      ns = "(u)(";
-        
-      for(int i = 0; i < vectorWidth; i++) {
-        ns += "(nonce * " + vectorWidth + ") + " + i;
-          
-        String s;
-        
-        if(vectorWidth > 1)
-          s = ".s" + "0123456789abcdef".charAt(i);
-        else
-          s = "";
-          
-        checkOutput += "if(H" + s + " == 0) {" 
-                    + "output[" + i + "] = ns" + s + ";"
-                    + "}";
-          
-        if(i != vectorWidth - 1) {
-          ns += ", ";
-        }
-      }
-        
-      ns += ")";    
-
-      compileOptions += " -D NS=\"" + ns + "\"";
-      compileOptions += " -D CHECKOUTPUT=\"" + checkOutput + "\"";
+      String compileOptions = "";
       
       if(forceBitAlign)
         compileOptions += " -D FORCEBITALIGN";
       
       if(forceWorkSize > 0)
-        compileOptions += " -D WORKGROUPSIZE=\"__attribute__((reqd_work_group_size(" + forceWorkSize + ", 1, 1)))\"";
-      else
-        compileOptions += " -D WORKGROUPSIZE=\"\"";
+        compileOptions += " -D WORKGROUPSIZE=" + forceWorkSize;
       
       program = CL10.clCreateProgramWithSource(context, source, null);
       err = CL10.clBuildProgram(program, device, compileOptions, null);
@@ -465,12 +413,11 @@ class DiabloMiner {
       IntBuffer errBuf = BufferUtils.createIntBuffer(1);
       
       ExecutionState() throws NoSuchAlgorithmException {
-        buffer = BufferUtils.createByteBuffer(vectorWidth * 4);
+        buffer = BufferUtils.createByteBuffer(4);
         
-        for(int i = 0; i < vectorWidth; i++)
-          buffer.putInt(i*4, 0);
+        buffer.putInt(0, 0);
         
-        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, vectorWidth * 4, errBuf);
+        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4, errBuf);
         
         if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
           running = false;
@@ -492,67 +439,66 @@ class DiabloMiner {
         CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
         
         while(running == true && threadRunning == true) {       
-          boolean reset = false;
-          
-          for(int i = 0; i < vectorWidth; i++) {
-            if(buffer.getInt(i*4) > 0) {     
-              for(int j = 0; j < 19; j++)
-                digestInput.putInt(j*4, currentWork.data[j]);
+          if(buffer.getInt(0) > 0) {     
+            for(int j = 0; j < 19; j++)
+              digestInput.putInt(j*4, currentWork.data[j]);
               
-              digestInput.putInt(19*4, buffer.getInt(i*4));
+            digestInput.putInt(19*4, buffer.getInt(0));
 
-              digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
+            digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
               
-              long G = ((long)((0x000000FF & ((int)digestOutput[27])) << 24 | 
-                  (0x000000FF & ((int)digestOutput[26])) << 16 |
-                  (0x000000FF & ((int)digestOutput[25])) << 8 | 
-                  (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
+            long G = ((long)((0x000000FF & ((int)digestOutput[27])) << 24 | 
+                (0x000000FF & ((int)digestOutput[26])) << 16 |
+                (0x000000FF & ((int)digestOutput[25])) << 8 | 
+                (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
               
-              long H = ((long)((0x000000FF & ((int)digestOutput[31])) << 24 | 
-                  (0x000000FF & ((int)digestOutput[30])) << 16 |
-                  (0x000000FF & ((int)digestOutput[29])) << 8 | 
-                  (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
+            long H = ((long)((0x000000FF & ((int)digestOutput[31])) << 24 | 
+                (0x000000FF & ((int)digestOutput[30])) << 16 |
+                (0x000000FF & ((int)digestOutput[29])) << 8 | 
+                (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
               
-              if(debug) {
-                System.out.println("\rDEBUG: Attempt " + currentAttempts + " found on " + deviceName + " at " +
-                    DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
-                currentAttempts++;
-              }
-              
-              if(G <= currentWork.target[6]) {
-                if(H == 0) {
-                  if(currentWork.sendWork(buffer.getInt(i*4)))
-                    System.out.println("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
-                        DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
-                  else
-                    if(debug)
-                      System.out.println("\rDEBUG: Block found, but rejected by Bitcoin,  on " + deviceName +
-                          " at " + DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
-                  
-                  for(int j = 0; j < deviceStates.size(); j++) {
-                    DeviceState device = deviceStates.get(j);
-                    
-                    for(int k = 0; k < EXECUTION_TOTAL; k++)
-                      device.executions[k].currentWork.lastPull = 0;
-                  }
-                  
-                  currentBlocks++;
-                } else {
-                  System.err.println("\rERROR: Invalid block found on " + deviceName + " at " +
-                      DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()) +
-                      ", possible driver or hardware issue");
-                }
-              }
-              
-              buffer.putInt(i*4, 0);
-              reset = true;
+            if(debug) {
+              System.out.println("\rDEBUG: Attempt " + currentAttempts + " found on " + deviceName + " at " +
+                  DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+              currentAttempts++;
             }
-          }
-          
-          if(reset)
+              
+            if(G <= currentWork.target[6]) {
+              if(H == 0) {
+                if(currentWork.sendWork(buffer.getInt(0))) {
+                  System.out.print("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
+                      DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+                    
+                  if(debug)
+                    System.out.println(" with header of " + currentWork.encodeBlock());
+                  else
+                    System.out.println();
+                } else {
+                  if(debug)
+                    System.out.println("\rDEBUG: Block found, but rejected by Bitcoin, on " + deviceName +
+                        " at " + DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+                }
+                  
+                for(int i = 0; i < deviceStates.size(); i++) {
+                  DeviceState device = deviceStates.get(i);
+                    
+                  for(int j = 0; j < EXECUTION_TOTAL; j++)
+                    device.executions[j].currentWork.lastPull = 0;
+                }
+                  
+                currentBlocks++;
+              } else {
+                System.err.println("\rERROR: Invalid block found on " + deviceName + " at " +
+                    DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()) +
+                    ", possible driver or hardware issue");
+              }
+            }
+              
+            buffer.putInt(0, 0);
             CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
+          }            
           
-          if(currentWork.lastPull + 5000 < now.get() || base > (Math.pow(2, 32) / vectorWidth)) {
+          if(currentWork.lastPull + 5000 < now.get() || base > (Math.pow(2, 32))) {
             currentWork.getWork();
             currentWork.lastPull = now.get();
             base = 0;
@@ -599,7 +545,7 @@ class DiabloMiner {
                 System.out.println("\rDEBUG: Spurious CL_INVALID_KERNEL_ARGS, ignoring");
             }
           } else {                  
-            hashCount.addAndGet(workSizeTemp.get(0) * vectorWidth);
+            hashCount.addAndGet(workSizeTemp.get(0));
             base += workSizeTemp.get(0);
             runs.incrementAndGet();
           }
