@@ -1,4 +1,4 @@
-#if FORCEBITALIGN
+#if BITALIGN
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
 #define rot(x,y) amd_bitalign(x, x, (uint)(32-y))
 #else

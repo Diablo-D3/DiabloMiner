@@ -65,7 +65,6 @@ class DiabloMiner {
   String userPass;
   float targetFPS = 60;
   int forceWorkSize = 0;
-  boolean forceBitAlign = false;
   boolean debug = false;
   
   String source;
@@ -100,7 +99,6 @@ class DiabloMiner {
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true," bitcoin host port");
-    options.addOption("a", "bitalign", false, "force bitalign on for Radeon 5xxx + ATI SDK 2.1");
     options.addOption("d", "debug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
     
@@ -148,9 +146,6 @@ class DiabloMiner {
     
     if(line.hasOption("worksize"))
       forceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
-
-    if(line.hasOption("bitalign"))
-      forceBitAlign = true;
     
     if(line.hasOption("debug"))
       debug = true;
@@ -275,6 +270,8 @@ class DiabloMiner {
     AtomicLong runs = new AtomicLong(0);
     AtomicLong runsThen = new AtomicLong(0);
     
+    boolean hasBitAlign = false;
+    
     DeviceState(CLPlatform platform, CLDevice device, int count) throws Exception {
       this.device = device;
       
@@ -294,10 +291,18 @@ class DiabloMiner {
         }
       }, null);
 
+      ByteBuffer extb = BufferUtils.createByteBuffer(1024);
+      CL10.clGetDeviceInfo(device, CL10.CL_DEVICE_EXTENSIONS, extb, null);
+      byte[] exta = new byte[1024];
+      extb.get(exta);
+      
+      if(new String(exta).contains("cl_amd_media_ops"))
+        hasBitAlign = true;
+      
       String compileOptions = "";
       
-      if(forceBitAlign)
-        compileOptions += " -D FORCEBITALIGN";
+      if(hasBitAlign)
+        compileOptions += " -D BITALIGN";
       
       if(forceWorkSize > 0)
         compileOptions += " -D WORKGROUPSIZE=" + forceWorkSize;
