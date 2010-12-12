@@ -165,12 +165,16 @@ class DiabloMiner {
     source = new String(data).trim();
     stream.close();
 
+    info("Started");
+    
     CL.create();
 
     List<CLPlatform> platforms = CLPlatform.getPlatforms();
       
-    if(platforms == null)
-      throw new Exception("No OpenCL platforms found.");
+    if(platforms == null) {
+      error("No OpenCL platforms found.");
+      System.exit(0);
+    }
   
     int count = 1;
     
@@ -184,7 +188,7 @@ class DiabloMiner {
     }
     
     long previousCount = 0;
-    long averageStartTime = startTime = System.nanoTime() / 1000000;
+    long averageStartTime = startTime = (System.nanoTime() / 1000000) - 1;
     now.set((long) startTime);
 
     for(int i = 0; i < deviceStates.size(); i++) {
@@ -194,9 +198,7 @@ class DiabloMiner {
       
       deviceStates.get(i).checkDevice();
     }
-    
-    System.out.println("Started at " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM).format(new Date()));
-    
+
     System.out.print("Waiting...");
     
     while(running) {     
@@ -251,6 +253,23 @@ class DiabloMiner {
     out[nh] = t1 + t2;
   }
   
+  static String getDateTime() {
+    return "[" + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(new Date()) + "]";
+  }
+    
+  void info(String msg) {
+    System.out.println("\r" + getDateTime() + " " + msg);
+  }
+
+  void debug(String msg) {
+    if(debug)
+      System.out.println("\r" + getDateTime() + " DEBUG: " + msg);
+  }
+
+  void error(String msg) {
+    System.err.println("\r" + getDateTime() + " ERROR: " + msg);
+  }
+  
   class DeviceState {
     final String deviceName;
  
@@ -282,12 +301,10 @@ class DiabloMiner {
       deviceName = device.getInfoString(CL10.CL_DEVICE_NAME) + " (#" + count + ")";
       int deviceCU = device.getInfoInt(CL10.CL_DEVICE_MAX_COMPUTE_UNITS);
       long deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
-
-      System.out.print("Added " + deviceName + " (" + deviceCU + " CU, local work size of ");
       
       context = CL10.clCreateContext(properties, device, new CLContextCallback() {
         protected void handleMessage(String errinfo, ByteBuffer private_info) {
-          System.err.println("\nERROR: " + errinfo);
+          error(errinfo);
         }
       }, null);
 
@@ -310,8 +327,6 @@ class DiabloMiner {
       program = CL10.clCreateProgramWithSource(context, source, null);
       err = CL10.clBuildProgram(program, device, compileOptions, null);
       if(err != CL10.CL_SUCCESS) {
-        System.out.println();
-
         ByteBuffer logBuffer = BufferUtils.createByteBuffer(1024);
         byte[] log = new byte[1024];
         
@@ -321,13 +336,14 @@ class DiabloMiner {
         
         System.out.println(new String(log));
         
-        throw new Exception("Failed to build program on " + deviceName);
+        error("Failed to build program on " + deviceName);
+        System.exit(0);
       }
 
       kernel = CL10.clCreateKernel(program, "search", null);
       if(kernel == null) {
-        System.out.println();
-        throw new Exception("Failed to create kernel on " + deviceName);
+        error("Failed to create kernel on " + deviceName);
+        System.exit(0);
       }
       
       if(forceWorkSize == 0) {
@@ -343,7 +359,7 @@ class DiabloMiner {
         localWorkSize.put(0, forceWorkSize);
       }
       
-      System.out.println(localWorkSize.get(0) + ")");
+      info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
       
       workSizeBase = localWorkSize.get(0) * deviceCU;
 
@@ -380,7 +396,7 @@ class DiabloMiner {
       
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         if((executions[i].threadStartTime + TIME_OFFSET < now.get()) && (executions[i].lastTime  + TIME_OFFSET < now.get())) {
-          System.err.println("\rERROR: Executor on " + deviceName + " locked up, restarting it");
+          error("Executor on " + deviceName + " locked up, restarting it");
           
           executions[i].threadRunning = false;
           
@@ -426,7 +442,7 @@ class DiabloMiner {
         
         if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
           running = false;
-          System.err.println("\rERROR: Failed to allocate output buffer");
+          error("Failed to allocate output buffer");
         }
 
         currentWork = new GetWorkParser();
@@ -438,7 +454,7 @@ class DiabloMiner {
         
         if(queue == null || errBuf.get(0) != CL10.CL_SUCCESS) {
           running = false;
-          System.err.println("\rERROR: Failed to allocate queue");
+          error("Failed to allocate queue");
         }
         
         CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
@@ -463,25 +479,17 @@ class DiabloMiner {
                 (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
               
             if(debug) {
-              System.out.println("\rDEBUG: Attempt " + currentAttempts + " found on " + deviceName + " at " +
-                  DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+              debug("Attempt " + currentAttempts + " found on " + deviceName);
               currentAttempts++;
             }
               
             if(G <= currentWork.target[6]) {
               if(H == 0) {
                 if(currentWork.sendWork(buffer.getInt(0))) {
-                  System.out.print("\rBlock " + currentBlocks + " found on " + deviceName + " at " +
-                      DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
-                    
-                  if(debug)
-                    System.out.println(" with header of " + currentWork.encodeBlock());
-                  else
-                    System.out.println();
+                  info("Block " + currentBlocks + " found on " + deviceName);                    
+                  debug("Header of " + currentWork.encodeBlock());
                 } else {
-                  if(debug)
-                    System.out.println("\rDEBUG: Block found, but rejected by Bitcoin, on " + deviceName +
-                        " at " + DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()));
+                  debug("Block found, but rejected by Bitcoin, on " + deviceName);
                 }
                   
                 for(int i = 0; i < deviceStates.size(); i++) {
@@ -493,9 +501,7 @@ class DiabloMiner {
                   
                 currentBlocks++;
               } else {
-                System.err.println("\rERROR: Invalid block found on " + deviceName + " at " +
-                    DateFormat.getTimeInstance(DateFormat.MEDIUM).format(new Date()) +
-                    ", possible driver or hardware issue");
+                error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
               }
             }
               
@@ -543,11 +549,10 @@ class DiabloMiner {
             
           if(err !=  CL10.CL_SUCCESS) {
             if(err != CL10.CL_INVALID_KERNEL_ARGS) {
-              System.err.println("\rERROR: Failed to queue kernel, error " + err);
+              error("Failed to queue kernel, error " + err);
               running = false;
             } else {
-              if(debug)
-                System.out.println("\rDEBUG: Spurious CL_INVALID_KERNEL_ARGS, ignoring");
+              debug("Spurious CL_INVALID_KERNEL_ARGS, ignoring");
             }
           } else {                  
             hashCount.addAndGet(workSizeTemp.get(0));
@@ -592,7 +597,7 @@ class DiabloMiner {
       try {
         parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
       } catch(IOException e) {
-        System.err.println("\rERROR: Can't connect to Bitcoin: " + e.getLocalizedMessage());
+        error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
       }
     }
     
@@ -608,7 +613,7 @@ class DiabloMiner {
       try {
         return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
       } catch(IOException e) {
-        System.err.println("\rERROR: Can't connect to Bitcoin: " + e.getLocalizedMessage());
+        error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
         return false;
       }
     }
