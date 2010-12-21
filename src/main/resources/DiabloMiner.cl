@@ -14,6 +14,8 @@
 #define R(x) (work[x] = (rot(work[x-2],15)^rot(work[x-2],13)^((work[x-2])>>(uint)10)) + work[x-7] + (rot(work[x-15],25)^rot(work[x-15],14)^((work[x-15])>>(uint)3)) + work[x-16])
 #define sharound(a,b,c,d,e,f,g,h,x,K) {h=(h+(rot(e, 26)^rot(e, 21)^rot(e, 7))+(g^(e&(f^g)))+(uint)K+x); t1=(rot(a, 30)^rot(a, 19)^rot(a, 10))+((a&b)|(c&(a|b))); d+=h; h+=t1;}
 
+//AMD doesn't do BFI_INT via bitselect yet; when it does change (g^(e&(f^g))) to (bitselect(e, g, f))
+
 __kernel __attribute__((vec_type_hint(uint))) WGS void search(
     const uint block0, const uint block1, const uint block2,
     const uint state0, const uint state1, const uint state2, const uint state3,
