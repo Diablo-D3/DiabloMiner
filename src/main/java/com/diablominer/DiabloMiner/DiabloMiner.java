@@ -60,6 +60,8 @@ import org.lwjgl.opencl.CLMem;
 import org.lwjgl.opencl.CLPlatform;
 import org.lwjgl.opencl.CLProgram;
 
+import com.diablominer.DiabloMiner.DiabloMiner.NetworkState.GetWorkParser;
+
 class DiabloMiner {
   URL bitcoind;
   String userPass;
@@ -73,6 +75,8 @@ class DiabloMiner {
   
   AtomicLong hashCount = new AtomicLong(0);
   
+  AtomicLong base = new AtomicLong(0);
+  
   List<DeviceState> deviceStates = new ArrayList<DeviceState>();
   long startTime;
   AtomicLong now = new AtomicLong(0);
@@ -81,6 +85,8 @@ class DiabloMiner {
   
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 15000;
+  
+  NetworkState networkState;
   
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
@@ -158,7 +164,10 @@ class DiabloMiner {
     
     bitcoind = new URL("http://"+ ip + ":" + port + "/");    
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
- 
+
+    networkState = this.new NetworkState();
+    new Thread(networkState).start();
+    
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
     byte[] data = new byte[64 * 1024];
     stream.read(data);
@@ -192,13 +201,12 @@ class DiabloMiner {
     now.set((long) startTime);
 
     for(int i = 0; i < deviceStates.size(); i++) {
+      DeviceState device = deviceStates.get(i);
+        
       for(int j = 0; j < EXECUTION_TOTAL; j++)
-        deviceStates.get(i).executions[j].threadStartTime = 
-          deviceStates.get(i).executions[j].lastTime = now.get();
-      
-      deviceStates.get(i).checkDevice();
+        device.executions[j].lastTime = now.get();
     }
-
+    
     System.out.print("Waiting...");
     
     while(running) {     
@@ -424,9 +432,7 @@ class DiabloMiner {
       final ByteBuffer digestInput = ByteBuffer.allocate(80);
       byte[] digestOutput;
       
-      final GetWorkParser currentWork;
-      
-      long base;
+      GetWorkParser currentWork;
       
       long threadStartTime;
       long lastTime;
@@ -445,8 +451,8 @@ class DiabloMiner {
           error("Failed to allocate output buffer");
         }
 
-        currentWork = new GetWorkParser();
-        threadStartTime = lastTime = currentWork.lastPull = now.get();
+        currentWork = networkState.cloneCurrentWork();
+        threadStartTime = lastTime = currentWork.pulled = now.get();
       }
       
       public void run() {
@@ -486,20 +492,14 @@ class DiabloMiner {
             if(G <= currentWork.target[6]) {
               if(H == 0) {
                 if(currentWork.sendWork(buffer.getInt(0))) {
-                  info("Block " + currentBlocks + " found on " + deviceName);                    
+                  info("Block " + currentBlocks + " found on " + deviceName);                
                   debug("Header of " + currentWork.encodeBlock());
+                  currentBlocks++;
                 } else {
                   debug("Block found, but rejected by Bitcoin, on " + deviceName);
                 }
-                  
-                for(int i = 0; i < deviceStates.size(); i++) {
-                  DeviceState device = deviceStates.get(i);
-                    
-                  for(int j = 0; j < EXECUTION_TOTAL; j++)
-                    device.executions[j].currentWork.lastPull = 0;
-                }
-                  
-                currentBlocks++;
+
+                networkState.reset();
               } else {
                 error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
               }
@@ -509,19 +509,18 @@ class DiabloMiner {
             CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
           }            
           
-          if(currentWork.lastPull + 5000 < now.get() || base > (Math.pow(2, 32))) {
-            currentWork.getWork();
-            currentWork.lastPull = now.get();
-            base = 0;
-          }
+          if(base.get() > (Math.pow(2, 32)))
+            networkState.reset();
           
+          currentWork = networkState.checkWorkAge(currentWork);
+                    
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
         
           sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.data[16], 0x428A2F98);
           sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.data[17], 0x71374491);
           sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.data[18], 0xB5C0FBCF);
         
-          int offset = (int)base;
+          int offset = (int)base.get();
           workSizeTemp.put(0, workSize);
           int err = 0;
 
@@ -556,7 +555,7 @@ class DiabloMiner {
             }
           } else {                  
             hashCount.addAndGet(workSizeTemp.get(0));
-            base += workSizeTemp.get(0);
+            base.addAndGet(workSizeTemp.get(0));
             runs.incrementAndGet();
           }
           
@@ -574,111 +573,170 @@ class DiabloMiner {
     }
   }
   
-  class GetWorkParser {
-    final int[] data = new int[32];
-    final int[] midstate = new int[8];
-    final long[] target = new long[8];
-    
+  class NetworkState implements Runnable {   
     final ObjectMapper mapper = new ObjectMapper();
-    final ObjectNode getworkMessage;
-
-    long lastPull = 0;
+    final ObjectNode getworkMessage = mapper.createObjectNode();
     
-    GetWorkParser() {
-      getworkMessage = mapper.createObjectNode();
+    final GetWorkParser currentWork;
+    
+    NetworkState() {
       getworkMessage.put("method", "getwork");
       getworkMessage.putArray("params");
       getworkMessage.put("id", 1);
       
-      getWork();
+      currentWork = this.new GetWorkParser();
     }
     
-    void getWork() {
-      try {
-        parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
-      } catch(IOException e) {
-        error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
-      }
-    }
-    
-    boolean sendWork(int nonce) {
-      data[19] = nonce;
-      
-      ObjectNode sendworkMessage = mapper.createObjectNode();
-      sendworkMessage.put("method", "getwork");
-      ArrayNode params = sendworkMessage.putArray("params");
-      params.add(encodeBlock());
-      sendworkMessage.put("id", 1);             
-      
-      try {
-        return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
-      } catch(IOException e) {
-        error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
-        return false;
+    public void run() {
+      while(running == true) {
+        doUpdate();
+        
+        try {
+          Thread.sleep(5000);
+        } catch (InterruptedException e) {
+          // Do nothing
+        }
       }
     }
     
-    JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
-      HttpURLConnection connection = (HttpURLConnection) bitcoind.openConnection();
-      connection.setRequestProperty("Authorization", userPassword);
-      connection.setDoOutput(true);
-
-      OutputStream requestStream = connection.getOutputStream();
-      Writer request = new OutputStreamWriter(requestStream);
-      request.write(requestMessage.toString());
-      request.close();
-      requestStream.close();
-
-      ObjectNode responseMessage = null;
-
-      try {
-        InputStream response = connection.getInputStream();
-        responseMessage = (ObjectNode) mapper.readTree(response);
-        response.close();
-      } catch (IOException e) {
-        InputStream errorStream = connection.getErrorStream();
-        byte[] error = new byte[1024];
-        errorStream.read(error);
-
-        IOException e2 = new IOException("Failed to communicate with bitcoind: " + new String(error).trim());
-        e2.setStackTrace(e.getStackTrace());
-
-        throw e2;
-      }
-
-      connection.disconnect();
-
-      return responseMessage.get("result");
+    GetWorkParser checkWorkAge(GetWorkParser old) {
+      if(old.pulled != currentWork.pulled)
+        return cloneCurrentWork();
+      else
+        return old;
     }
     
-    void parse(JsonNode responseMessage) {
-      String datas = responseMessage.get("data").getValueAsText();
-      String midstates = responseMessage.get("midstate").getValueAsText();
-      String targets = responseMessage.get("target").getValueAsText();
+    synchronized void doUpdate() {
+      currentWork.getWork();
+      currentWork.pulled = now.get();
+    }
+    
+    synchronized GetWorkParser cloneCurrentWork() {
+      return this.new GetWorkParser(currentWork);
+    }
+    
+    void reset() {
+      doUpdate();
+      base.set(0);
       
-      for(int i = 0; i < data.length; i++) {
-        String parse = datas.substring(i*8, (i*8)+8);
-        data[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
-      }
-
-      for(int i = 0; i < midstate.length; i++) {
-        String parse = midstates.substring(i*8, (i*8)+8);
-        midstate[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
-      }
-      
-      for(int i = 0; i < target.length; i++) {
-        String parse = targets.substring(i*8, (i*8)+8);
-        target[i] = (Long.reverseBytes(Long.parseLong(parse, 16) << 16)) >>> 16;
+      for(int i = 0; i < deviceStates.size(); i++) {
+        DeviceState device = deviceStates.get(i);
+          
+        for(int j = 0; j < EXECUTION_TOTAL; j++)
+          device.executions[j].currentWork.reset();
       }
     }
+    
+    class GetWorkParser {
+      final int[] data = new int[32];
+      final int[] midstate = new int[8];
+      final long[] target = new long[8];
+      
+      long pulled = 0;
+      
+      GetWorkParser() {
+        getWork();
+      }
+      
+      GetWorkParser(GetWorkParser src) {
+        System.arraycopy(src.data, 0, data, 0, 32);
+        System.arraycopy(src.midstate, 0, midstate, 0, 8);
+        System.arraycopy(src.target, 0, target, 0, 8);
+        
+        pulled = src.pulled;
+      }
+      
+      void getWork() {
+        try {
+          parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
+        } catch(IOException e) {
+          error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+        }
+      }
+      
+      boolean sendWork(int nonce) {
+        data[19] = nonce;
+        
+        ObjectNode sendworkMessage = mapper.createObjectNode();
+        sendworkMessage.put("method", "getwork");
+        ArrayNode params = sendworkMessage.putArray("params");
+        params.add(encodeBlock());
+        sendworkMessage.put("id", 1);             
+        
+        try {
+          return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
+        } catch(IOException e) {
+          error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+          return false;
+        }
+      }
+      
+      JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) bitcoind.openConnection();
+        connection.setRequestProperty("Authorization", userPassword);
+        connection.setDoOutput(true);
+        
+        OutputStream requestStream = connection.getOutputStream();
+        Writer request = new OutputStreamWriter(requestStream);
+        request.write(requestMessage.toString());
+        request.close();
+        requestStream.close();
+        
+        ObjectNode responseMessage = null;
+        
+        try {
+          InputStream response = connection.getInputStream();
+          responseMessage = (ObjectNode) mapper.readTree(response);
+          response.close();
+        } catch (IOException e) {
+          InputStream errorStream = connection.getErrorStream();
+          byte[] error = new byte[1024];
+          errorStream.read(error);
 
-    String encodeBlock() {
-      StringBuilder builder = new StringBuilder();
+          IOException e2 = new IOException("Failed to communicate with bitcoind: " + new String(error).trim());
+          e2.setStackTrace(e.getStackTrace());
+
+          throw e2;
+        }
+        
+        connection.disconnect();
+        
+        return responseMessage.get("result");
+      }
       
-      for(int d : data)
-        builder.append(String.format("%08x", Integer.reverseBytes(d)));
+      void parse(JsonNode responseMessage) {
+        String datas = responseMessage.get("data").getValueAsText();
+        String midstates = responseMessage.get("midstate").getValueAsText();
+        String targets = responseMessage.get("target").getValueAsText();
       
-      return builder.toString();
+        for(int i = 0; i < data.length; i++) {
+          String parse = datas.substring(i*8, (i*8)+8);
+          data[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
+        }
+
+        for(int i = 0; i < midstate.length; i++) {
+          String parse = midstates.substring(i*8, (i*8)+8);
+          midstate[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
+        }
+      
+        for(int i = 0; i < target.length; i++) {
+          String parse = targets.substring(i*8, (i*8)+8);
+          target[i] = (Long.reverseBytes(Long.parseLong(parse, 16) << 16)) >>> 16;
+        }
+      }
+
+      String encodeBlock() {
+        StringBuilder builder = new StringBuilder();
+      
+        for(int d : data)
+          builder.append(String.format("%08x", Integer.reverseBytes(d)));
+      
+        return builder.toString();
+      }
+    
+      void reset() {
+        pulled = 0;
+      }
     }
   }
 }
