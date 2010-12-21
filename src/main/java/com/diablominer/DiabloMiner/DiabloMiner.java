@@ -68,6 +68,7 @@ class DiabloMiner {
   float targetFPS = 60;
   int forceWorkSize = 0;
   boolean debug = false;
+  int getworkRefresh = 5000;
   
   String source;
 
@@ -105,6 +106,7 @@ class DiabloMiner {
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true," bitcoin host port");
+    options.addOption("g", "getwork", true, "seconds between getwork refresh");
     options.addOption("d", "debug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
     
@@ -152,6 +154,9 @@ class DiabloMiner {
     
     if(line.hasOption("worksize"))
       forceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
+    
+    if(line.hasOption("getwork"))
+      getworkRefresh = Integer.parseInt(line.getOptionValue("getwork")) * 1000;
     
     if(line.hasOption("debug"))
       debug = true;
@@ -592,7 +597,7 @@ class DiabloMiner {
         doUpdate();
         
         try {
-          Thread.sleep(5000);
+          Thread.sleep(getworkRefresh);
         } catch (InterruptedException e) {
           // Do nothing
         }
