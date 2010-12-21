@@ -504,7 +504,8 @@ class DiabloMiner {
                   debug("Block found, but rejected by Bitcoin, on " + deviceName);
                 }
 
-                networkState.reset();
+                debug("Forcing getwork update due to block submission");
+                networkState.doUpdate();
               } else {
                 error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
               }
@@ -513,9 +514,6 @@ class DiabloMiner {
             buffer.putInt(0, 0);
             CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
           }            
-          
-          if(base.get() > (Math.pow(2, 32)))
-            networkState.reset();
           
           currentWork = networkState.checkWorkAge(currentWork);
                     
@@ -527,6 +525,7 @@ class DiabloMiner {
         
           int offset = (int)base.get();
           workSizeTemp.put(0, workSize);
+          base.addAndGet(workSizeTemp.get(0));
           int err = 0;
 
           kernel.setArg(0, currentWork.data[16])
@@ -548,7 +547,7 @@ class DiabloMiner {
                 .setArg(16, midstate2[7])
                 .setArg(17, offset)
                 .setArg(18, output);
-          
+   
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
             
           if(err !=  CL10.CL_SUCCESS) {
@@ -560,7 +559,6 @@ class DiabloMiner {
             }
           } else {                  
             hashCount.addAndGet(workSizeTemp.get(0));
-            base.addAndGet(workSizeTemp.get(0));
             runs.incrementAndGet();
           }
           
@@ -593,8 +591,11 @@ class DiabloMiner {
     }
     
     public void run() {
+      long lastRun = 0;
+      
       while(running == true) {
-        doUpdate();
+        if(lastRun + getworkRefresh < currentWork.pulled)
+          doUpdate();
         
         try {
           Thread.sleep(getworkRefresh);
@@ -604,32 +605,26 @@ class DiabloMiner {
       }
     }
     
-    GetWorkParser checkWorkAge(GetWorkParser old) {
-      if(old.pulled != currentWork.pulled)
+    synchronized GetWorkParser checkWorkAge(GetWorkParser old) {
+      if(base.get() > (Math.pow(2, 32))) {
+        debug("Forcing getwork update due to nonce saturation");
+        doUpdate();
         return cloneCurrentWork();
-      else
+      } else if(old.pulled != currentWork.pulled) {
+        return cloneCurrentWork();
+      } else {
         return old;
+      }
     }
     
     synchronized void doUpdate() {
       currentWork.getWork();
       currentWork.pulled = now.get();
+      base.set(0);
     }
     
     synchronized GetWorkParser cloneCurrentWork() {
       return this.new GetWorkParser(currentWork);
-    }
-    
-    void reset() {
-      doUpdate();
-      base.set(0);
-      
-      for(int i = 0; i < deviceStates.size(); i++) {
-        DeviceState device = deviceStates.get(i);
-          
-        for(int j = 0; j < EXECUTION_TOTAL; j++)
-          device.executions[j].currentWork.reset();
-      }
     }
     
     class GetWorkParser {
