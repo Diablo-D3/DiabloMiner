@@ -457,7 +457,7 @@ class DiabloMiner {
         }
 
         currentWork = networkState.cloneCurrentWork();
-        threadStartTime = lastTime = currentWork.pulled = now.get();
+        threadStartTime = lastTime = now.get();
       }
       
       public void run() {
@@ -594,7 +594,7 @@ class DiabloMiner {
       long lastRun = 0;
       
       while(running == true) {
-        if(lastRun + getworkRefresh < currentWork.pulled)
+        if(lastRun + getworkRefresh < currentWork.pulled.get())
           doUpdate();
         
         try {
@@ -610,7 +610,7 @@ class DiabloMiner {
         debug("Forcing getwork update due to nonce saturation");
         doUpdate();
         return cloneCurrentWork();
-      } else if(old.pulled != currentWork.pulled) {
+      } else if(old.pulled.get() != currentWork.pulled.get()) {
         return cloneCurrentWork();
       } else {
         return old;
@@ -619,7 +619,7 @@ class DiabloMiner {
     
     synchronized void doUpdate() {
       currentWork.getWork();
-      currentWork.pulled = now.get();
+      currentWork.pulled.set(now.get());
       base.set(0);
     }
     
@@ -632,7 +632,7 @@ class DiabloMiner {
       final int[] midstate = new int[8];
       final long[] target = new long[8];
       
-      long pulled = 0;
+      AtomicLong pulled = new AtomicLong(0);
       
       GetWorkParser() {
         getWork();
@@ -643,7 +643,7 @@ class DiabloMiner {
         System.arraycopy(src.midstate, 0, midstate, 0, 8);
         System.arraycopy(src.target, 0, target, 0, 8);
         
-        pulled = src.pulled;
+        pulled.set(src.pulled.get());
       }
       
       void getWork() {
@@ -732,10 +732,6 @@ class DiabloMiner {
           builder.append(String.format("%08x", Integer.reverseBytes(d)));
       
         return builder.toString();
-      }
-    
-      void reset() {
-        pulled = 0;
       }
     }
   }
