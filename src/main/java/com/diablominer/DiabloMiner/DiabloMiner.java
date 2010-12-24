@@ -33,6 +33,7 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.cli.CommandLine;
@@ -76,13 +77,11 @@ class DiabloMiner {
   
   AtomicLong hashCount = new AtomicLong(0);
   
-  AtomicLong base = new AtomicLong(0);
-  
   List<DeviceState> deviceStates = new ArrayList<DeviceState>();
   long startTime;
   AtomicLong now = new AtomicLong(0);
-  int currentBlocks = 1;
-  int currentAttempts = 1;
+  AtomicInteger currentBlocks = new AtomicInteger(0);
+  AtomicInteger currentAttempts = new AtomicInteger(0);
   
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 15000;
@@ -171,7 +170,7 @@ class DiabloMiner {
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
 
     networkState = this.new NetworkState();
-    new Thread(networkState).start();
+    new Thread(networkState, "DiabloMiner Network Handler").start();
     
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
     byte[] data = new byte[64 * 1024];
@@ -209,7 +208,7 @@ class DiabloMiner {
       DeviceState device = deviceStates.get(i);
         
       for(int j = 0; j < EXECUTION_TOTAL; j++)
-        device.executions[j].lastTime = now.get();
+        device.executions[j].lastTime.set(now.get());
     }
     
     System.out.print("Waiting...");
@@ -300,7 +299,7 @@ class DiabloMiner {
     final ExecutionState executions[];
         
     AtomicLong runs = new AtomicLong(0);
-    AtomicLong runsThen = new AtomicLong(0);
+    long runsThen = 0;
     
     boolean hasBitAlign = false;
     
@@ -384,15 +383,16 @@ class DiabloMiner {
       
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
-        new Thread(executions[i]).start();
+        new Thread(executions[i], "DiabloMiner Executor (" + deviceName + "/" + i + ")").start();
       }
     }
     
     void checkDevice() throws NoSuchAlgorithmException {
       long elapsed = now.get() - startTime;
+      long currentRuns = runs.get();
       
-      if(runs.get() > (runsThen.get() + targetFPS)) {
-        float basis = elapsed / runs.get();
+      if(currentRuns > (runsThen + targetFPS)) {
+        float basis = elapsed / currentRuns;
         float targetBasis = 1000 / targetFPS;
         
         if(basis < targetBasis / 2 && workSizeMax > workSize + (workSizeBase * workSizeBase))
@@ -404,17 +404,19 @@ class DiabloMiner {
         else if(basis > targetBasis && workSize > workSizeBase + workSizeBase)
           workSize -= workSizeBase;
         
-        runsThen.set(runs.get());
+        runsThen = currentRuns;
       }
       
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
-        if((executions[i].threadStartTime + TIME_OFFSET < now.get()) && (executions[i].lastTime  + TIME_OFFSET < now.get())) {
+        if((executions[i].threadStartTime + TIME_OFFSET < now.get()) &&
+            (executions[i].lastTime.get() + TIME_OFFSET < now.get())) {
           error("Executor on " + deviceName + " locked up, restarting it");
           
           executions[i].threadRunning = false;
           
           executions[i] = this.new ExecutionState();
-          new Thread(executions[i]).start();
+          executions[i].lastTime.set(now.get());
+          new Thread(executions[i], "DiabloMiner Executor (" + deviceName + "/" + i + ")").start();          
         }
       }
     }
@@ -440,7 +442,7 @@ class DiabloMiner {
       GetWorkParser currentWork;
       
       long threadStartTime;
-      long lastTime;
+      AtomicLong lastTime = new AtomicLong(0);
       
       IntBuffer errBuf = BufferUtils.createIntBuffer(1);
       
@@ -457,7 +459,7 @@ class DiabloMiner {
         }
 
         currentWork = networkState.cloneCurrentWork();
-        threadStartTime = lastTime = now.get();
+        threadStartTime = now.get();
       }
       
       public void run() {
@@ -489,17 +491,13 @@ class DiabloMiner {
                 (0x000000FF & ((int)digestOutput[29])) << 8 | 
                 (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
               
-            if(debug) {
-              debug("Attempt " + currentAttempts + " found on " + deviceName);
-              currentAttempts++;
-            }
+            debug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
               
             if(G <= currentWork.target[6]) {
               if(H == 0) {
                 if(currentWork.sendWork(buffer.getInt(0))) {
-                  info("Block " + currentBlocks + " found on " + deviceName);                
+                  info("Block " + currentBlocks.incrementAndGet() + " found on " + deviceName);                
                   debug("Header of " + currentWork.encodeBlock());
-                  currentBlocks++;
                 } else {
                   debug("Block found, but rejected by Bitcoin, on " + deviceName);
                 }
@@ -515,17 +513,15 @@ class DiabloMiner {
             CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
           }            
           
-          currentWork = networkState.checkWorkAge(currentWork);
+          workSizeTemp.put(0, workSize);   
+          currentWork = networkState.refreshWork(currentWork, workSizeTemp.get(0));
                     
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
         
           sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.data[16], 0x428A2F98);
           sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.data[17], 0x71374491);
           sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.data[18], 0xB5C0FBCF);
-        
-          int offset = (int)base.get();
-          workSizeTemp.put(0, workSize);
-          base.addAndGet(workSizeTemp.get(0));
+
           int err = 0;
 
           kernel.setArg(0, currentWork.data[16])
@@ -545,9 +541,9 @@ class DiabloMiner {
                 .setArg(14, midstate2[5])
                 .setArg(15, midstate2[6])
                 .setArg(16, midstate2[7])
-                .setArg(17, offset)
+                .setArg(17, (int)currentWork.getBase())
                 .setArg(18, output);
-   
+          
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
             
           if(err !=  CL10.CL_SUCCESS) {
@@ -562,7 +558,7 @@ class DiabloMiner {
             runs.incrementAndGet();
           }
           
-          lastTime = now.get();
+          lastTime.set(now.get());
           
           CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
         }
@@ -580,21 +576,20 @@ class DiabloMiner {
     final ObjectMapper mapper = new ObjectMapper();
     final ObjectNode getworkMessage = mapper.createObjectNode();
     
-    final GetWorkParser currentWork;
+    final GetWorkParser globalWork;
     
     NetworkState() {
       getworkMessage.put("method", "getwork");
       getworkMessage.putArray("params");
       getworkMessage.put("id", 1);
       
-      currentWork = this.new GetWorkParser();
+      globalWork = this.new GetWorkParser();
+      doUpdate();
     }
     
     public void run() {
-      long lastRun = 0;
-      
       while(running == true) {
-        if(lastRun + getworkRefresh < currentWork.pulled.get())
+        if(globalWork.getPulled() + getworkRefresh < now.get());
           doUpdate();
         
         try {
@@ -605,26 +600,21 @@ class DiabloMiner {
       }
     }
     
-    synchronized GetWorkParser checkWorkAge(GetWorkParser old) {
-      if(base.get() > (Math.pow(2, 32))) {
+    synchronized GetWorkParser refreshWork(GetWorkParser old, long delta) {
+      if(globalWork.addAndGetBase(delta) > Math.pow(2, 32)) {
         debug("Forcing getwork update due to nonce saturation");
         doUpdate();
-        return cloneCurrentWork();
-      } else if(old.pulled.get() != currentWork.pulled.get()) {
-        return cloneCurrentWork();
-      } else {
-        return old;
       }
+      
+      return cloneCurrentWork();
     }
     
     synchronized void doUpdate() {
-      currentWork.getWork();
-      currentWork.pulled.set(now.get());
-      base.set(0);
+      globalWork.getWork();
     }
     
     synchronized GetWorkParser cloneCurrentWork() {
-      return this.new GetWorkParser(currentWork);
+      return globalWork.clone();
     }
     
     class GetWorkParser {
@@ -632,26 +622,48 @@ class DiabloMiner {
       final int[] midstate = new int[8];
       final long[] target = new long[8];
       
-      AtomicLong pulled = new AtomicLong(0);
+      long pulled;
+      long base; 
       
-      GetWorkParser() {
-        getWork();
-      }
-      
-      GetWorkParser(GetWorkParser src) {
-        System.arraycopy(src.data, 0, data, 0, 32);
-        System.arraycopy(src.midstate, 0, midstate, 0, 8);
-        System.arraycopy(src.target, 0, target, 0, 8);
+      protected synchronized GetWorkParser clone() {
+        GetWorkParser clone = new GetWorkParser();
         
-        pulled.set(src.pulled.get());
+        System.arraycopy(data, 0, clone.data, 0, 32);
+        System.arraycopy(midstate, 0, clone.midstate, 0, 8);
+        System.arraycopy(target, 0, clone.target, 0, 8);
+        
+        clone.pulled = getPulled();
+        clone.base = getBase();
+        
+        return clone;
       }
       
-      void getWork() {
+      synchronized long getPulled() {
+        return pulled;
+      }
+      
+      synchronized long getBase() {
+        return base;
+      }
+      
+      synchronized long addAndGetBase(long delta) {
+        return base += delta;
+      }
+      
+      synchronized long resetBase() {
+        base = 0;
+        return base;
+      }
+      
+      synchronized void getWork() {
         try {
           parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
         } catch(IOException e) {
           error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
         }
+        
+        pulled = now.get();
+        base = 0;
       }
       
       boolean sendWork(int nonce) {
