@@ -600,13 +600,16 @@ class DiabloMiner {
       }
     }
     
-    synchronized GetWorkParser refreshWork(GetWorkParser old, long delta) {
-      if(globalWork.addAndGetBase(delta) > Math.pow(2, 32)) {
+    synchronized GetWorkParser refreshWork(GetWorkParser old, long delta) {     
+      if(globalWork.getBase() + delta > Math.pow(2, 32)) {
         debug("Forcing getwork update due to nonce saturation");
         doUpdate();
       }
       
-      return cloneCurrentWork();
+      GetWorkParser clone = cloneCurrentWork();      
+      globalWork.addBase(delta);
+      
+      return clone;      
     }
     
     synchronized void doUpdate() {
@@ -646,8 +649,8 @@ class DiabloMiner {
         return base;
       }
       
-      synchronized long addAndGetBase(long delta) {
-        return base += delta;
+      synchronized void addBase(long delta) {
+        base += delta;
       }
       
       synchronized long resetBase() {
