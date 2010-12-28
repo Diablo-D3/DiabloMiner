@@ -33,7 +33,6 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.cli.CommandLine;
@@ -61,8 +60,6 @@ import org.lwjgl.opencl.CLMem;
 import org.lwjgl.opencl.CLPlatform;
 import org.lwjgl.opencl.CLProgram;
 
-import com.diablominer.DiabloMiner.DiabloMiner.NetworkState.GetWorkParser;
-
 class DiabloMiner {
   URL bitcoind;
   String userPass;
@@ -75,19 +72,18 @@ class DiabloMiner {
 
   boolean running = true;
   
-  AtomicLong hashCount = new AtomicLong(0);
+  List<DeviceState> deviceStates = new ArrayList<DeviceState>();  
   
-  List<DeviceState> deviceStates = new ArrayList<DeviceState>();
   long startTime;
-  AtomicLong now = new AtomicLong(0);
-  AtomicInteger currentBlocks = new AtomicInteger(0);
-  AtomicInteger currentAttempts = new AtomicInteger(0);
+  
+  AtomicLong khashCount = new AtomicLong(0);
+  
+  AtomicLong currentBlocks = new AtomicLong(0);
+  AtomicLong currentAttempts = new AtomicLong(0);
   
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 15000;
-  
-  NetworkState networkState;
-  
+    
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
     
@@ -168,9 +164,6 @@ class DiabloMiner {
     
     bitcoind = new URL("http://"+ ip + ":" + port + "/");    
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
-
-    networkState = this.new NetworkState();
-    new Thread(networkState, "DiabloMiner Network Handler").start();
     
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
     byte[] data = new byte[64 * 1024];
@@ -200,44 +193,36 @@ class DiabloMiner {
       }
     }
     
-    long previousCount = 0;
-    long averageStartTime = startTime = (System.nanoTime() / 1000000) - 1;
-    now.set((long) startTime);
+    long previousKHashCount = 0;
+    long previousAdjustedKHashCount = 0;
+    long previousAdjustedStartTime = startTime = (getNow()) - 1;
 
-    for(int i = 0; i < deviceStates.size(); i++) {
-      DeviceState device = deviceStates.get(i);
-        
-      for(int j = 0; j < EXECUTION_TOTAL; j++)
-        device.executions[j].lastTime.set(now.get());
-    }
-    
-    System.out.print("Waiting...");
-    
-    while(running) {     
-      now.set(System.nanoTime() / 1000000);
-      
+    while(running) {      
       for(int i = 0; i < deviceStates.size(); i++)
         deviceStates.get(i).checkDevice();
-            
-      long adjustedCount = hashCount.get() / (now.get() - averageStartTime);
       
-      if(now.get() - startTime > TIME_OFFSET) {
-        long averageCount = (adjustedCount + previousCount) / 2;
-        System.out.print("\r" + averageCount + " khash/sec");
+      long now = getNow();
+      long currentKHashCount = khashCount.get();
+      long adjustedKHashCount = (currentKHashCount - previousKHashCount) * 1000 / (now - previousAdjustedStartTime);
+      
+      if(getNow() - startTime > TIME_OFFSET * 2) {
+        long averageKHashCount = (adjustedKHashCount + previousAdjustedKHashCount) / 2;
+        System.out.print("\r" + averageKHashCount + " khash/sec");
+      } else {        
+        System.out.print("\rWaiting...");
       }
       
-      if(now.get() - TIME_OFFSET > averageStartTime) {
-        previousCount = adjustedCount;
-        averageStartTime = now.get();
-        hashCount.set(0);
+      if(getNow() - TIME_OFFSET * 2 > previousAdjustedStartTime) {
+        previousKHashCount = currentKHashCount;
+        previousAdjustedKHashCount = adjustedKHashCount;
+        previousAdjustedStartTime = now - 1;
       }
       
       try {
-        if(now.get() - startTime < TIME_OFFSET) {
-          Thread.sleep(1);
-        } else {
+        if(now - startTime > TIME_OFFSET)
           Thread.sleep(1000);
-        }
+        else
+          Thread.sleep(1);
       } catch (InterruptedException e) {
         running = false;
       }
@@ -282,6 +267,10 @@ class DiabloMiner {
     System.err.println("\r" + getDateTime() + " ERROR: " + msg);
   }
   
+  long getNow() {
+    return System.nanoTime() / 1000000;
+  }
+  
   class DeviceState {
     final String deviceName;
  
@@ -292,16 +281,15 @@ class DiabloMiner {
     final CLKernel kernel;
 
     long workSize;
-    long workSizeMax;
     long workSizeBase;
     final PointerBuffer localWorkSize = BufferUtils.createPointerBuffer(1);
-    
-    final ExecutionState executions[];
+
+    final ExecutionState executions[] = new ExecutionState[EXECUTION_TOTAL];;
         
     AtomicLong runs = new AtomicLong(0);
-    long runsThen = 0;
+    long lastRuns = 0;
     
-    boolean hasBitAlign = false;
+    boolean hasBitAlign = false;   
     
     DeviceState(CLPlatform platform, CLDevice device, int count) throws Exception {
       this.device = device;
@@ -319,7 +307,7 @@ class DiabloMiner {
           error(errinfo);
         }
       }, null);
-
+      
       ByteBuffer extb = BufferUtils.createByteBuffer(1024);
       CL10.clGetDeviceInfo(device, CL10.CL_DEVICE_EXTENSIONS, extb, null);
       byte[] exta = new byte[1024];
@@ -374,63 +362,40 @@ class DiabloMiner {
       info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
       
       workSizeBase = localWorkSize.get(0) * deviceCU;
-
-      workSizeMax = (long) (Math.pow(2, 32) - 1);
       
       workSize = workSizeBase * workSizeBase;
 
-      executions = new ExecutionState[EXECUTION_TOTAL];
-      
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
         new Thread(executions[i], "DiabloMiner Executor (" + deviceName + "/" + i + ")").start();
       }
     }
     
-    void checkDevice() throws NoSuchAlgorithmException {
-      long elapsed = now.get() - startTime;
-      long currentRuns = runs.get();
-      
-      if(currentRuns > (runsThen + targetFPS)) {
-        float basis = elapsed / currentRuns;
+    void checkDevice() {
+      long now = getNow();
+      long elapsed = now - startTime;
+
+      if(now > startTime + TIME_OFFSET && runs.get() > lastRuns + targetFPS) {
+        float basis = elapsed / runs.get();
         float targetBasis = 1000 / targetFPS;
-        
-        if(basis < targetBasis / 2 && workSizeMax > workSize + (workSizeBase * workSizeBase))
-          workSize += (workSizeBase * workSizeBase);
-        else if(basis < targetBasis && workSizeMax > workSize + workSizeBase)
+      
+        if(basis < targetBasis / 2 && Integer.MAX_VALUE > workSize + (workSizeBase * workSizeBase))
+          workSize += workSizeBase * workSizeBase;
+        else if(basis < targetBasis && Integer.MAX_VALUE > workSize + workSizeBase)
           workSize += workSizeBase;
         else if(basis > targetBasis * 2 && workSize > (workSizeBase * workSizeBase) + workSizeBase)
-          workSize -= (workSizeBase * workSizeBase);
+          workSize -= workSizeBase * workSizeBase;
         else if(basis > targetBasis && workSize > workSizeBase + workSizeBase)
           workSize -= workSizeBase;
         
-        runsThen = currentRuns;
-      }
-      
-      for(int i = 0; i < EXECUTION_TOTAL; i++) {
-        if((executions[i].threadStartTime + TIME_OFFSET < now.get()) &&
-            (executions[i].lastTime.get() + TIME_OFFSET < now.get())) {
-          error("Executor on " + deviceName + " locked up, restarting it");
-          
-          executions[i].threadRunning = false;
-          
-          executions[i] = this.new ExecutionState();
-          executions[i].lastTime.set(now.get());
-          new Thread(executions[i], "DiabloMiner Executor (" + deviceName + "/" + i + ")").start();          
-        }
+        lastRuns = runs.get();
       }
     }
 
     class ExecutionState implements Runnable {
-      boolean threadRunning = true;
-      
       CLCommandQueue queue;
-      
       final ByteBuffer buffer;
       final CLMem output;
-      final CLMem store[] = new CLMem[8];
-      
-      final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
       
       final int[] midstate2 = new int[16];    
       
@@ -439,44 +404,40 @@ class DiabloMiner {
       final ByteBuffer digestInput = ByteBuffer.allocate(80);
       byte[] digestOutput;
       
-      GetWorkParser currentWork;
+      final GetWorkParser currentWork;
       
-      long threadStartTime;
-      AtomicLong lastTime = new AtomicLong(0);
+      final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
       
-      IntBuffer errBuf = BufferUtils.createIntBuffer(1);
+      final IntBuffer errBuf = BufferUtils.createIntBuffer(1);
+      int err;
       
-      ExecutionState() throws NoSuchAlgorithmException {
+      ExecutionState() throws NoSuchAlgorithmException {                        
+        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4, errBuf);
         buffer = BufferUtils.createByteBuffer(4);
-        
         buffer.putInt(0, 0);
         
-        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4, errBuf);
-        
-        if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-          running = false;
-          error("Failed to allocate output buffer");
-        }
-
-        currentWork = networkState.cloneCurrentWork();
-        threadStartTime = now.get();
+        currentWork = new GetWorkParser();
       }
       
       public void run() {
-        queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);
-        
+        queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);      
         if(queue == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-          running = false;
           error("Failed to allocate queue");
+          System.exit(0);
         }
         
-        CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+        CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);        
         
-        while(running == true && threadRunning == true) {       
-          if(buffer.getInt(0) > 0) {     
+        if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
+          error("Failed to allocate output buffer");
+          System.exit(0);
+        }
+        
+        while(running = true) {        
+          if(buffer.getInt(0) > 0) {
             for(int j = 0; j < 19; j++)
               digestInput.putInt(j*4, currentWork.data[j]);
-              
+           
             digestInput.putInt(19*4, buffer.getInt(0));
 
             digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
@@ -490,9 +451,9 @@ class DiabloMiner {
                 (0x000000FF & ((int)digestOutput[30])) << 16 |
                 (0x000000FF & ((int)digestOutput[29])) << 8 | 
                 (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
-              
+
             debug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
-              
+          
             if(G <= currentWork.target[6]) {
               if(H == 0) {
                 if(currentWork.sendWork(buffer.getInt(0))) {
@@ -501,29 +462,27 @@ class DiabloMiner {
                 } else {
                   debug("Block found, but rejected by Bitcoin, on " + deviceName);
                 }
-
+              
                 debug("Forcing getwork update due to block submission");
-                networkState.doUpdate();
+                currentWork.forceUpdate();
               } else {
                 error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
               }
             }
-              
-            buffer.putInt(0, 0);
-            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
-          }            
           
+            buffer.putInt(0, 0);
+            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+          }            
+        
           workSizeTemp.put(0, workSize);   
-          currentWork = networkState.refreshWork(currentWork, workSizeTemp.get(0));
-                    
+          currentWork.update(workSizeTemp.get(0));
+        
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
         
           sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.data[16], 0x428A2F98);
           sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.data[17], 0x71374491);
           sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.data[18], 0xB5C0FBCF);
-
-          int err = 0;
-
+        
           kernel.setArg(0, currentWork.data[16])
                 .setArg(1, currentWork.data[17])
                 .setArg(2, currentWork.data[18])
@@ -541,213 +500,151 @@ class DiabloMiner {
                 .setArg(14, midstate2[5])
                 .setArg(15, midstate2[6])
                 .setArg(16, midstate2[7])
-                .setArg(17, (int)currentWork.getBase())
+                .setArg(17, (int)currentWork.base)
                 .setArg(18, output);
           
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
-            
+          CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
+        
           if(err !=  CL10.CL_SUCCESS) {
             if(err != CL10.CL_INVALID_KERNEL_ARGS) {
               error("Failed to queue kernel, error " + err);
-              running = false;
+              System.exit(0);
             } else {
               debug("Spurious CL_INVALID_KERNEL_ARGS, ignoring");
             }
           } else {                  
-            hashCount.addAndGet(workSizeTemp.get(0));
+            khashCount.addAndGet(workSizeTemp.get(0) / 1000);
+            currentWork.base += workSizeTemp.get(0);
             runs.incrementAndGet();
           }
-          
-          lastTime.set(now.get());
-          
-          CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
         }
-        
-        CL10.clFinish(queue);
-                
-        CL10.clReleaseCommandQueue(queue);
-        
-        CL10.clReleaseMemObject(output);
       }
     }
   }
-  
-  class NetworkState implements Runnable {   
+    
+  class GetWorkParser {
+    final int[] data = new int[32];
+    final int[] midstate = new int[8];
+    final long[] target = new long[8];
+      
     final ObjectMapper mapper = new ObjectMapper();
     final ObjectNode getworkMessage = mapper.createObjectNode();
     
-    final GetWorkParser globalWork;
-    
-    NetworkState() {
+    long lastPulled = 0;
+    long base = 0;
+      
+    GetWorkParser() {
       getworkMessage.put("method", "getwork");
       getworkMessage.putArray("params");
       getworkMessage.put("id", 1);
-      
-      globalWork = this.new GetWorkParser();
-      doUpdate();
+
+      getWork();
     }
-    
-    public void run() {
-      while(running == true) {
-        if(globalWork.getPulled() + getworkRefresh < now.get());
-          doUpdate();
-        
-        try {
-          Thread.sleep(getworkRefresh);
-        } catch (InterruptedException e) {
-          // Do nothing
-        }
+     
+    void forceUpdate() {
+      for(int i = 0; i < deviceStates.size(); i++) {     
+        for(int j = 0; j < EXECUTION_TOTAL; j++)
+          deviceStates.get(i).executions[j].currentWork.lastPulled = 0;
       }
     }
     
-    synchronized GetWorkParser refreshWork(GetWorkParser old, long delta) {     
-      if(globalWork.getBase() + delta > Math.pow(2, 32)) {
+    void update(long delta) {     
+      if(base + delta > Integer.MAX_VALUE) {
         debug("Forcing getwork update due to nonce saturation");
-        doUpdate();
+        getWork();
+      } else if(lastPulled + getworkRefresh < getNow()) {
+        getWork();
       }
+    }
       
-      GetWorkParser clone = cloneCurrentWork();      
-      globalWork.addBase(delta);
+    void getWork() {
+      try {
+        parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
+      } catch(IOException e) {
+        error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+      }
+
+      lastPulled = getNow();
+      base = 0;
+    }
       
-      return clone;      
+    boolean sendWork(int nonce) {
+      data[19] = nonce;
+      
+      ObjectNode sendworkMessage = mapper.createObjectNode();
+      sendworkMessage.put("method", "getwork");
+      ArrayNode params = sendworkMessage.putArray("params");
+      params.add(encodeBlock());
+      sendworkMessage.put("id", 1);             
+      
+      try {
+        return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
+      } catch(IOException e) {
+        error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+        return false;
+      }
     }
     
-    synchronized void doUpdate() {
-      globalWork.getWork();
+    JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
+      HttpURLConnection connection = (HttpURLConnection) bitcoind.openConnection();
+      connection.setRequestProperty("Authorization", userPassword);
+      connection.setDoOutput(true);
+      
+      OutputStream requestStream = connection.getOutputStream();
+      Writer request = new OutputStreamWriter(requestStream);
+      request.write(requestMessage.toString());
+      request.close();
+      requestStream.close();
+        
+      ObjectNode responseMessage = null;
+        
+      try {
+        InputStream response = connection.getInputStream();
+        responseMessage = (ObjectNode) mapper.readTree(response);
+        response.close();
+      } catch (IOException e) {
+        InputStream errorStream = connection.getErrorStream();
+        byte[] error = new byte[1024];
+        errorStream.read(error);
+        IOException e2 = new IOException("Failed to communicate with bitcoind: " + new String(error).trim());
+        e2.setStackTrace(e.getStackTrace());
+        throw e2;
+      }
+      
+      connection.disconnect();
+      
+      return responseMessage.get("result");
     }
-    
-    synchronized GetWorkParser cloneCurrentWork() {
-      return globalWork.clone();
+      
+    void parse(JsonNode responseMessage) {
+      String datas = responseMessage.get("data").getValueAsText();
+      String midstates = responseMessage.get("midstate").getValueAsText();
+      String targets = responseMessage.get("target").getValueAsText();
+      
+      for(int i = 0; i < data.length; i++) {
+        String parse = datas.substring(i*8, (i*8)+8);
+        data[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
+      }
+
+      for(int i = 0; i < midstate.length; i++) {
+        String parse = midstates.substring(i*8, (i*8)+8);
+        midstate[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
+      }
+      
+      for(int i = 0; i < target.length; i++) {
+        String parse = targets.substring(i*8, (i*8)+8);
+        target[i] = (Long.reverseBytes(Long.parseLong(parse, 16) << 16)) >>> 16;
+      }
     }
+
+    String encodeBlock() {
+      StringBuilder builder = new StringBuilder();
     
-    class GetWorkParser {
-      final int[] data = new int[32];
-      final int[] midstate = new int[8];
-      final long[] target = new long[8];
-      
-      long pulled;
-      long base; 
-      
-      protected synchronized GetWorkParser clone() {
-        GetWorkParser clone = new GetWorkParser();
-        
-        System.arraycopy(data, 0, clone.data, 0, 32);
-        System.arraycopy(midstate, 0, clone.midstate, 0, 8);
-        System.arraycopy(target, 0, clone.target, 0, 8);
-        
-        clone.pulled = getPulled();
-        clone.base = getBase();
-        
-        return clone;
-      }
-      
-      synchronized long getPulled() {
-        return pulled;
-      }
-      
-      synchronized long getBase() {
-        return base;
-      }
-      
-      synchronized void addBase(long delta) {
-        base += delta;
-      }
-      
-      synchronized long resetBase() {
-        base = 0;
-        return base;
-      }
-      
-      synchronized void getWork() {
-        try {
-          parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
-        } catch(IOException e) {
-          error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
-        }
-        
-        pulled = now.get();
-        base = 0;
-      }
-      
-      boolean sendWork(int nonce) {
-        data[19] = nonce;
-        
-        ObjectNode sendworkMessage = mapper.createObjectNode();
-        sendworkMessage.put("method", "getwork");
-        ArrayNode params = sendworkMessage.putArray("params");
-        params.add(encodeBlock());
-        sendworkMessage.put("id", 1);             
-        
-        try {
-          return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
-        } catch(IOException e) {
-          error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
-          return false;
-        }
-      }
-      
-      JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) bitcoind.openConnection();
-        connection.setRequestProperty("Authorization", userPassword);
-        connection.setDoOutput(true);
-        
-        OutputStream requestStream = connection.getOutputStream();
-        Writer request = new OutputStreamWriter(requestStream);
-        request.write(requestMessage.toString());
-        request.close();
-        requestStream.close();
-        
-        ObjectNode responseMessage = null;
-        
-        try {
-          InputStream response = connection.getInputStream();
-          responseMessage = (ObjectNode) mapper.readTree(response);
-          response.close();
-        } catch (IOException e) {
-          InputStream errorStream = connection.getErrorStream();
-          byte[] error = new byte[1024];
-          errorStream.read(error);
-
-          IOException e2 = new IOException("Failed to communicate with bitcoind: " + new String(error).trim());
-          e2.setStackTrace(e.getStackTrace());
-
-          throw e2;
-        }
-        
-        connection.disconnect();
-        
-        return responseMessage.get("result");
-      }
-      
-      void parse(JsonNode responseMessage) {
-        String datas = responseMessage.get("data").getValueAsText();
-        String midstates = responseMessage.get("midstate").getValueAsText();
-        String targets = responseMessage.get("target").getValueAsText();
-      
-        for(int i = 0; i < data.length; i++) {
-          String parse = datas.substring(i*8, (i*8)+8);
-          data[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
-        }
-
-        for(int i = 0; i < midstate.length; i++) {
-          String parse = midstates.substring(i*8, (i*8)+8);
-          midstate[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
-        }
-      
-        for(int i = 0; i < target.length; i++) {
-          String parse = targets.substring(i*8, (i*8)+8);
-          target[i] = (Long.reverseBytes(Long.parseLong(parse, 16) << 16)) >>> 16;
-        }
-      }
-
-      String encodeBlock() {
-        StringBuilder builder = new StringBuilder();
-      
-        for(int d : data)
-          builder.append(String.format("%08x", Integer.reverseBytes(d)));
-      
-        return builder.toString();
-      }
+      for(int d : data)
+        builder.append(String.format("%08x", Integer.reverseBytes(d)));
+    
+      return builder.toString();
     }
   }
 }
