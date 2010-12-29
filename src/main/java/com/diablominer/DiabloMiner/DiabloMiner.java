@@ -178,7 +178,7 @@ class DiabloMiner {
     List<CLPlatform> platforms = CLPlatform.getPlatforms();
       
     if(platforms == null) {
-      error("No OpenCL platforms found.");
+      error("No OpenCL platforms found");
       System.exit(0);
     }
   
@@ -186,7 +186,12 @@ class DiabloMiner {
     
     for(CLPlatform platform : platforms) {         
       List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
-        
+
+      if(devices == null) {
+        error("OpenCL platform " + platform.getInfoString(CL10.CL_PLATFORM_NAME) + " contains no devices");
+        System.exit(0);
+      }
+      
       for (CLDevice device : devices) {
         deviceStates.add(this.new DeviceState(platform, device, count));
         count++;
