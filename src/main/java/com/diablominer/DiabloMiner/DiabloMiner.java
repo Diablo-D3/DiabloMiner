@@ -606,6 +606,10 @@ class DiabloMiner {
         
       try {
         InputStream response = connection.getInputStream();
+        
+        if(response == null)
+          throw new IOException("Bitcoin disconnected during response");
+        
         responseMessage = (ObjectNode) mapper.readTree(response);
         response.close();
       } catch (IOException e) {
