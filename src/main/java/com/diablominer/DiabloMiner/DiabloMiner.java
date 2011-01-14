@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.InflaterInputStream;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.HelpFormatter;
@@ -594,6 +596,7 @@ class DiabloMiner {
     JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
       HttpURLConnection connection = (HttpURLConnection) bitcoind.openConnection();
       connection.setRequestProperty("Authorization", userPassword);
+      connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
       connection.setDoOutput(true);
       
       OutputStream requestStream = connection.getOutputStream();
@@ -604,24 +607,50 @@ class DiabloMiner {
         
       ObjectNode responseMessage = null;
         
+      InputStream responseStream = null;
+      
       try {
-        InputStream response = connection.getInputStream();
+        if(connection.getContentEncoding() != null) {
+          if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
+            responseStream = new GZIPInputStream(connection.getInputStream());
+          else if(connection.getContentEncoding().equalsIgnoreCase("deflate"))
+            responseStream = new InflaterInputStream(connection.getInputStream());
+        } else {
+          responseStream = connection.getInputStream();
+        }
         
-        if(response == null)
+        if(responseStream == null)
           throw new IOException("Bitcoin disconnected during response");
         
-        responseMessage = (ObjectNode) mapper.readTree(response);
-        response.close();
+        responseMessage = (ObjectNode) mapper.readTree(responseStream);
+        responseStream.close();
       } catch (IOException e) {
-        InputStream errorStream = connection.getErrorStream();
+        InputStream errorStream = null;
+        
+        if(connection.getContentEncoding() != null) {
+          if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
+            errorStream = new GZIPInputStream(connection.getErrorStream());
+          else if(connection.getContentEncoding().equalsIgnoreCase("deflate"))
+            errorStream = new InflaterInputStream(connection.getErrorStream());
+        } else {
+          errorStream = connection.getErrorStream();
+        }
+
+        if(errorStream == null)
+          throw new IOException("Bitcoin disconnected during response");
+        
         byte[] error = new byte[1024];
         errorStream.read(error);
-        IOException e2 = new IOException("Failed to communicate with bitcoind: " + new String(error).trim());
+        
+        errorStream.close();
+        
+        if(responseStream != null)
+          responseStream.close();
+        
+        IOException e2 = new IOException("Failed to communicate with Bitcoin: " + new String(error).trim());
         e2.setStackTrace(e.getStackTrace());
         throw e2;
       }
-      
-      connection.disconnect();
       
       return responseMessage.get("result");
     }
