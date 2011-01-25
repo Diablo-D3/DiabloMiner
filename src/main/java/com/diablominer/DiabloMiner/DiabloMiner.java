@@ -212,17 +212,24 @@ class DiabloMiner {
       long currentKHashCount = khashCount.get();
       long adjustedKHashCount = (currentKHashCount - previousKHashCount) * 1000 / (now - previousAdjustedStartTime);
       
-      if(getNow() - startTime > TIME_OFFSET * 2) {
-        long averageKHashCount = (adjustedKHashCount + previousAdjustedKHashCount) / 2;
-        System.out.print("\r" + averageKHashCount + " khash/sec");
-      } else {        
-        System.out.print("\rWaiting...");
-      }
+      if(targetFPS == 1) {
+        if(now - startTime > TIME_OFFSET * 2)
+          System.out.print("\r" + adjustedKHashCount + " khash/sec");
+        else
+          System.out.print("\rWaiting...");
+      } else {
+        if(now - startTime > TIME_OFFSET * 2) {
+          long averageKHashCount = (adjustedKHashCount + previousAdjustedKHashCount) / 2;
+          System.out.print("\r" + averageKHashCount + " khash/sec");
+        } else {        
+          System.out.print("\rWaiting...");
+        }
       
-      if(getNow() - TIME_OFFSET * 2 > previousAdjustedStartTime) {
-        previousKHashCount = currentKHashCount;
-        previousAdjustedKHashCount = adjustedKHashCount;
-        previousAdjustedStartTime = now - 1;
+        if(getNow() - TIME_OFFSET * 2 > previousAdjustedStartTime) {
+          previousKHashCount = currentKHashCount;
+          previousAdjustedKHashCount = adjustedKHashCount;
+          previousAdjustedStartTime = now - 1;
+        }
       }
       
       try {
@@ -401,6 +408,9 @@ class DiabloMiner {
           workSize -= workSizeBase * workSizeBase;
         else if(basis > targetBasis && workSize > workSizeBase + workSizeBase)
           workSize -= workSizeBase;
+        
+        if(workSize < workSizeBase)
+          workSize = workSizeBase;
         
         lastRuns = runs.get();
       }
