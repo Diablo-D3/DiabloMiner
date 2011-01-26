@@ -212,7 +212,7 @@ class DiabloMiner {
       long currentKHashCount = khashCount.get();
       long adjustedKHashCount = (currentKHashCount - previousKHashCount) * 1000 / (now - previousAdjustedStartTime);
       
-      if(targetFPS == 1) {
+      if(targetFPS < 5) {
         if(now - startTime > TIME_OFFSET * 2)
           System.out.print("\r" + adjustedKHashCount + " khash/sec");
         else
@@ -378,13 +378,11 @@ class DiabloMiner {
       
       info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
       
-      if(hasBitAlign == true) {
+      if(hasBitAlign == true)
         workSizeBase = localWorkSize.get(0);
-        workSize = workSizeBase;
-      } else {
-        workSizeBase = localWorkSize.get(0) * deviceCU;
-        workSize = workSizeBase * workSizeBase;
-      }
+
+      workSizeBase = localWorkSize.get(0) * (1025 - loops); 
+      workSize = workSizeBase;
 
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
