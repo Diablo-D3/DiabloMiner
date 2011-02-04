@@ -78,13 +78,13 @@ class DiabloMiner {
   
   long startTime;
   
-  AtomicLong khashCount = new AtomicLong(0);
+  AtomicLong hashCount = new AtomicLong(0);
   
   AtomicLong currentBlocks = new AtomicLong(0);
   AtomicLong currentAttempts = new AtomicLong(0);
   
   final static int EXECUTION_TOTAL = 3;
-  final static long TIME_OFFSET = 15000;
+  final static long TIME_OFFSET = 7500;
     
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
@@ -200,8 +200,8 @@ class DiabloMiner {
       }
     }
     
-    long previousKHashCount = 0;
-    long previousAdjustedKHashCount = 0;
+    long previousHashCount = 0;
+    long previousAdjustedHashCount = 0;
     long previousAdjustedStartTime = startTime = (getNow()) - 1;
 
     while(running) {      
@@ -209,27 +209,21 @@ class DiabloMiner {
         deviceStates.get(i).checkDevice();
       
       long now = getNow();
-      long currentKHashCount = khashCount.get();
-      long adjustedKHashCount = (currentKHashCount - previousKHashCount) * 1000 / (now - previousAdjustedStartTime);
+      long currentHashCount = hashCount.get();
+      long adjustedHashCount = (currentHashCount - previousHashCount) / (now - previousAdjustedStartTime);
+      long hashLongCount = currentHashCount / (now - startTime);
+
+      if(now - startTime > TIME_OFFSET * 2) {
+        long averageHashCount = (adjustedHashCount + previousAdjustedHashCount) / 2;
+        System.out.print("\r" + averageHashCount + "/" + hashLongCount + " khash/sec");
+      } else {        
+        System.out.print("\rWaiting...");
+      }
       
-      if(targetFPS < 5) {
-        if(now - startTime > TIME_OFFSET * 2)
-          System.out.print("\r" + adjustedKHashCount + " khash/sec");
-        else
-          System.out.print("\rWaiting...");
-      } else {
-        if(now - startTime > TIME_OFFSET * 2) {
-          long averageKHashCount = (adjustedKHashCount + previousAdjustedKHashCount) / 2;
-          System.out.print("\r" + averageKHashCount + " khash/sec");
-        } else {        
-          System.out.print("\rWaiting...");
-        }
-      
-        if(getNow() - TIME_OFFSET * 2 > previousAdjustedStartTime) {
-          previousKHashCount = currentKHashCount;
-          previousAdjustedKHashCount = adjustedKHashCount;
-          previousAdjustedStartTime = now - 1;
-        }
+      if(getNow() - TIME_OFFSET * 2 > previousAdjustedStartTime) {
+        previousHashCount = currentHashCount;
+        previousAdjustedHashCount = adjustedHashCount;
+        previousAdjustedStartTime = now - 1;
       }
       
       try {
@@ -396,7 +390,7 @@ class DiabloMiner {
 
       if(now > startTime + TIME_OFFSET && runs.get() > lastRuns + targetFPS) {
         float basis = elapsed / runs.get();
-        float targetBasis = 1000 / targetFPS;
+        float targetBasis = 1000 / (targetFPS * EXECUTION_TOTAL);
       
         if(basis < targetBasis / 2 && Integer.MAX_VALUE / loops > workSize + (workSizeBase * workSizeBase))
           workSize += workSizeBase * workSizeBase;
@@ -497,7 +491,7 @@ class DiabloMiner {
           }            
         
           workSizeTemp.put(0, workSize);   
-          currentWork.update(workSizeTemp.get(0));
+          currentWork.update(workSizeTemp.get(0) * loops);
         
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
         
@@ -555,7 +549,7 @@ class DiabloMiner {
               debug("Spurious CL_INVALID_KERNEL_ARGS, ignoring");
             }
           } else {                  
-            khashCount.addAndGet(workSizeTemp.get(0) * loops / 1000);
+            hashCount.addAndGet(workSizeTemp.get(0) * loops);
             currentWork.base += workSizeTemp.get(0);
             runs.incrementAndGet();
           }
@@ -589,7 +583,7 @@ class DiabloMiner {
         }
         
         void update(long delta) {     
-          if(base + delta > Integer.MAX_VALUE / loops) {
+          if(base + delta > Integer.MAX_VALUE) {
             debug("Forcing getwork update due to nonce saturation");
             getWork();
           } else if(lastPulled + getworkRefresh < getNow()) {
