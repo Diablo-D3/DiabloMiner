@@ -85,6 +85,8 @@ class DiabloMiner {
   
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 7500;
+  final static int LOOPS = 1024;
+  final static int OUTPUTS = 256;
     
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
@@ -324,7 +326,7 @@ class DiabloMiner {
       
       if(new String(exta).contains("cl_amd_media_ops")) {
         hasBitAlign = true;
-        loops = 1024;
+        loops = LOOPS;
       }
       
       String compileOptions = "";
@@ -375,7 +377,7 @@ class DiabloMiner {
       if(hasBitAlign == true)
         workSizeBase = localWorkSize.get(0);
 
-      workSizeBase = localWorkSize.get(0) * (1025 - loops); 
+      workSizeBase = localWorkSize.get(0) * ((LOOPS + 1) - loops); 
       workSize = workSizeBase;
 
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
@@ -421,6 +423,7 @@ class DiabloMiner {
       byte[] digestOutput;
       
       final GetWorkParser currentWork;
+      int base = 0;
       
       final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
       
@@ -428,8 +431,8 @@ class DiabloMiner {
       int err;
       
       ExecutionState() throws NoSuchAlgorithmException {                        
-        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4, errBuf);
-        buffer = BufferUtils.createByteBuffer(4);
+        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
+        buffer = BufferUtils.createByteBuffer(4 * OUTPUTS);
         buffer.putInt(0, 0);
         
         currentWork = this.new GetWorkParser();
@@ -449,50 +452,66 @@ class DiabloMiner {
           System.exit(0);
         }
         
-        while(running = true) {        
-          if(buffer.getInt(0) > 0) {
-            for(int j = 0; j < 19; j++)
-              digestInput.putInt(j*4, currentWork.data[j]);
+        while(running = true) {
+          boolean submittedBlock = false;
+          boolean updateBuffer = false;
+                    
+          for(int z = 0; z < OUTPUTS; z++) {
+            int nonce = buffer.getInt(z * 4);
+            
+            if(nonce > 0) {               
+              for(int j = 0; j < 19; j++)
+                digestInput.putInt(j*4, currentWork.data[j]);
            
-            digestInput.putInt(19*4, buffer.getInt(0));
+              digestInput.putInt(19*4, nonce);
 
-            digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
+              digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
               
-            long G = ((long)((0x000000FF & ((int)digestOutput[27])) << 24 | 
-                (0x000000FF & ((int)digestOutput[26])) << 16 |
-                (0x000000FF & ((int)digestOutput[25])) << 8 | 
-                (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
+              long G = ((long)((0x000000FF & ((int)digestOutput[27])) << 24 | 
+                    (0x000000FF & ((int)digestOutput[26])) << 16 |
+                    (0x000000FF & ((int)digestOutput[25])) << 8 | 
+                    (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
               
-            long H = ((long)((0x000000FF & ((int)digestOutput[31])) << 24 | 
-                (0x000000FF & ((int)digestOutput[30])) << 16 |
-                (0x000000FF & ((int)digestOutput[29])) << 8 | 
-                (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
+              long H = ((long)((0x000000FF & ((int)digestOutput[31])) << 24 | 
+                    (0x000000FF & ((int)digestOutput[30])) << 16 |
+                    (0x000000FF & ((int)digestOutput[29])) << 8 | 
+                    (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
 
-            debug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
+              debug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
           
-            if(G <= currentWork.target[6]) {
-              if(H == 0) {
-                if(currentWork.sendWork(buffer.getInt(0))) {
-                  info("Block " + currentBlocks.incrementAndGet() + " found on " + deviceName);                
-                  debug("Header of " + currentWork.encodeBlock());
+              if(G <= currentWork.target[6]) {
+                if(H == 0) {
+                  if(currentWork.sendWork(nonce)) {
+                    info("Block " + currentBlocks.incrementAndGet() + " found on " + deviceName);                
+                    debug("Header of " + currentWork.encodeBlock());
+                  } else {
+                    debug("Block found, but rejected by Bitcoin, on " + deviceName);
+                  }
+
+                  submittedBlock = true;
                 } else {
-                  debug("Block found, but rejected by Bitcoin, on " + deviceName);
+                  error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
                 }
-              
-                debug("Forcing getwork update due to block submission");
-                currentWork.forceUpdate();
-              } else {
-                error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
               }
+            
+              buffer.putInt(z * 4, 0);
+              updateBuffer = true;
             }
-          
-            buffer.putInt(0, 0);
-            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
-          }            
+          }
         
+          if(updateBuffer == true)
+            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+          
+          if(submittedBlock == true) {            
+            debug("Forcing getwork update due to block submission");
+            currentWork.forceUpdate();
+          }
+          
           workSizeTemp.put(0, workSize);   
           currentWork.update(workSizeTemp.get(0) * loops);
         
+          base = (int) currentWork.base;
+          
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
         
           sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.data[16], 0x428A2F98);
@@ -535,7 +554,7 @@ class DiabloMiner {
                 .setArg(19, midstate2[5])
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
-                .setArg(22, (int)currentWork.base)
+                .setArg(22, base)
                 .setArg(23, output);
           
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
@@ -550,7 +569,7 @@ class DiabloMiner {
             }
           } else {                  
             hashCount.addAndGet(workSizeTemp.get(0) * loops);
-            currentWork.base += workSizeTemp.get(0);
+            currentWork.base += workSizeTemp.get(0) * loops;
             runs.incrementAndGet();
           }
         }                

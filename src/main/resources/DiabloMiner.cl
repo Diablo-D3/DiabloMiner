@@ -38,16 +38,17 @@ __kernel __attribute__((vec_type_hint(uint))) WGS void search(
   uint A, B, C, D, E, F, G, H;
   uint W0, W1, W2, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13, W14, W15;
   uint it;
-  const uint myid = get_global_id(0);
 
   #ifdef LOOPS
-  const uint tnonce = (base + myid) * 1024;
+  const uint tnonce = (base + get_global_id(0)) * 1024;
+  
+  uint outn = 0;
   
   for(it = 0; it != 1024; it++) {
     W3 = it ^ tnonce;
-  #else
-    const uint tnonce = base + myid;
-    
+  #else    
+    const uint tnonce = base + get_global_id(0);
+  
     W3 = tnonce;
   #endif
     E = fcty_e +  W3; A = state0 + E; E = E + fcty_e2;
@@ -271,11 +272,13 @@ __kernel __attribute__((vec_type_hint(uint))) WGS void search(
 
     if(H + 0x5be0cd19 == 0) {
 #ifdef LOOPS
-      output[0] = it ^ tnonce;
+      outn = it ^ tnonce;
     }
+    
+    output[tnonce & 0xFF] = outn;
   }
 #else
-      output[0] = tnonce;
+      output[tnonce & 0xFF] = tnonce;
     }
 #endif
 }
