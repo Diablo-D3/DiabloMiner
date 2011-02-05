@@ -332,7 +332,10 @@ class DiabloMiner {
       String compileOptions = "";
       
       if(hasBitAlign)
-        compileOptions += " -D BITALIGN -D LOOPS";
+        compileOptions += " -D BITALIGN";
+      
+      if(loops > 1)
+        compileOptions += " -D DOLOOPS";
       
       if(forceWorkSize > 0)
         compileOptions += " -D WORKGROUPSIZE=" + forceWorkSize;
@@ -373,9 +376,6 @@ class DiabloMiner {
       }
       
       info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
-      
-      if(hasBitAlign == true)
-        workSizeBase = localWorkSize.get(0);
 
       workSizeBase = localWorkSize.get(0) * ((LOOPS + 1) - loops); 
       workSize = workSizeBase;
@@ -423,7 +423,6 @@ class DiabloMiner {
       byte[] digestOutput;
       
       final GetWorkParser currentWork;
-      int base = 0;
       
       final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
       
@@ -508,9 +507,7 @@ class DiabloMiner {
           }
           
           workSizeTemp.put(0, workSize);   
-          currentWork.update(workSizeTemp.get(0) * loops);
-        
-          base = (int) currentWork.base;
+          currentWork.update(workSizeTemp.get(0));
           
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
         
@@ -554,7 +551,7 @@ class DiabloMiner {
                 .setArg(19, midstate2[5])
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
-                .setArg(22, base)
+                .setArg(22, (int) currentWork.base)
                 .setArg(23, output);
           
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
@@ -569,7 +566,7 @@ class DiabloMiner {
             }
           } else {                  
             hashCount.addAndGet(workSizeTemp.get(0) * loops);
-            currentWork.base += workSizeTemp.get(0) * loops;
+            currentWork.base += workSizeTemp.get(0);
             runs.incrementAndGet();
           }
         }                
@@ -602,7 +599,7 @@ class DiabloMiner {
         }
         
         void update(long delta) {     
-          if(base + delta > Integer.MAX_VALUE) {
+          if(base + delta > Integer.MAX_VALUE / loops) {
             debug("Forcing getwork update due to nonce saturation");
             getWork();
           } else if(lastPulled + getworkRefresh < getNow()) {

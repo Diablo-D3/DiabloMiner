@@ -1,5 +1,7 @@
 // ArtForz's kernel
 
+#define LOOPS 1024
+
 #if BITALIGN
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
 #define rotr(x, n) amd_bitalign((uint)(x), (uint)(x), (uint)n)
@@ -39,13 +41,12 @@ __kernel __attribute__((vec_type_hint(uint))) WGS void search(
   uint W0, W1, W2, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13, W14, W15;
   uint it;
 
-  #ifdef LOOPS
-  const uint tnonce = (base + get_global_id(0)) * 1024;
+  #ifdef DOLOOPS
+  const uint uppertnonce = (base + get_global_id(0)) * LOOPS;
   
-  uint outn = 0;
-  
-  for(it = 0; it != 1024; it++) {
-    W3 = it ^ tnonce;
+  for(it = 0; it != LOOPS; it++) {
+    uint tnonce = it ^ uppertnonce;
+    W3 = tnonce;
   #else    
     const uint tnonce = base + get_global_id(0);
   
@@ -271,14 +272,11 @@ __kernel __attribute__((vec_type_hint(uint))) WGS void search(
     D = D + (rotr(A, 6) ^ rotr(A, 11) ^ rotr(A, 25)) + (C ^ (A & (B ^ C))) + K[60] + W12; H = H + D;
 
     if(H + 0x5be0cd19 == 0) {
-#ifdef LOOPS
-      outn = it ^ tnonce;
+      output[tnonce & 0xFF] = tnonce;
+#ifdef DOLOOPS
     }
-    
-    output[tnonce & 0xFF] = outn;
   }
 #else
-      output[tnonce & 0xFF] = tnonce;
     }
 #endif
 }
