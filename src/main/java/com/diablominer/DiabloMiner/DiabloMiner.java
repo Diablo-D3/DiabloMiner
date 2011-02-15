@@ -23,7 +23,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.net.Authenticator;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.PasswordAuthentication;
+import java.net.Proxy;
+import java.net.Proxy.Type;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
@@ -73,6 +78,8 @@ class DiabloMiner {
   String source;
 
   boolean running = true;
+  
+  Proxy proxy = null;
 
   List<DeviceState> deviceStates = new ArrayList<DeviceState>();
 
@@ -106,6 +113,7 @@ class DiabloMiner {
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true," bitcoin host port");
     options.addOption("g", "getwork", true, "seconds between getwork refresh");
+    options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
     options.addOption("d", "debug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
 
@@ -131,7 +139,7 @@ class DiabloMiner {
       line = parser.parse(options, args);
 
       if(line.hasOption("help")) {
-        throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
+        throw new ParseException("A wise man once said, 'â†‘ â†‘ â†“ â†“ â†� â†’ â†� â†’ B A'");
       }
     } catch (ParseException e) {
       System.out.println(e.getLocalizedMessage() + "\n");
@@ -165,6 +173,20 @@ class DiabloMiner {
 
     if(line.hasOption("port"))
       port = line.getOptionValue("port");
+
+    if(line.hasOption("proxy")) {
+    	final String[] proxySettings = line.getOptionValue("proxy").split(":");
+        if(proxySettings.length >= 2) { //host and port, works a bit different (e.g. better) then setting http.proxyHost etc
+        	proxy = new Proxy(Type.HTTP, new InetSocketAddress(proxySettings[0], Integer.valueOf(proxySettings[1])));
+        }
+        if(proxySettings.length>=3) { //username and password
+            Authenticator.setDefault(new Authenticator() { //this is the important part, this gets you through the Microsoft proxy
+                protected PasswordAuthentication getPasswordAuthentication() {
+                  return new PasswordAuthentication(proxySettings[2], proxySettings[3].toCharArray());
+                }
+            });
+        }
+    }
 
     bitcoind = new URL("http://"+ ip + ":" + port + "/");
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
@@ -636,7 +658,13 @@ class DiabloMiner {
         }
 
         JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
-          HttpURLConnection connection = (HttpURLConnection) bitcoind.openConnection();
+        	HttpURLConnection connection;
+        	
+          if(proxy == null)
+            connection = (HttpURLConnection) bitcoind.openConnection();
+          else
+            connection = (HttpURLConnection) bitcoind.openConnection(proxy);
+        		
           connection.setRequestProperty("Authorization", userPassword);
           connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
           connection.setDoOutput(true);
