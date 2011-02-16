@@ -139,7 +139,7 @@ class DiabloMiner {
       line = parser.parse(options, args);
 
       if(line.hasOption("help")) {
-        throw new ParseException("A wise man once said, 'â†‘ â†‘ â†“ â†“ â†� â†’ â†� â†’ B A'");
+        throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
       }
     } catch (ParseException e) {
       System.out.println(e.getLocalizedMessage() + "\n");
@@ -176,16 +176,18 @@ class DiabloMiner {
 
     if(line.hasOption("proxy")) {
     	final String[] proxySettings = line.getOptionValue("proxy").split(":");
-        if(proxySettings.length >= 2) { //host and port, works a bit different (e.g. better) then setting http.proxyHost etc
-        	proxy = new Proxy(Type.HTTP, new InetSocketAddress(proxySettings[0], Integer.valueOf(proxySettings[1])));
-        }
-        if(proxySettings.length>=3) { //username and password
-            Authenticator.setDefault(new Authenticator() { //this is the important part, this gets you through the Microsoft proxy
-                protected PasswordAuthentication getPasswordAuthentication() {
-                  return new PasswordAuthentication(proxySettings[2], proxySettings[3].toCharArray());
-                }
-            });
-        }
+
+      if(proxySettings.length >= 2) {
+        proxy = new Proxy(Type.HTTP, new InetSocketAddress(proxySettings[0], Integer.valueOf(proxySettings[1])));
+      }
+
+      if(proxySettings.length >= 3) {
+        Authenticator.setDefault(new Authenticator() {
+          protected PasswordAuthentication getPasswordAuthentication() {
+            return new PasswordAuthentication(proxySettings[2], proxySettings[3].toCharArray());
+          }
+        });
+      }
     }
 
     bitcoind = new URL("http://"+ ip + ":" + port + "/");
