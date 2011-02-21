@@ -71,14 +71,14 @@ class DiabloMiner {
   URL bitcoind;
   String userPass;
   float targetFPS = 60;
-  int forceWorkSize = 0;
+  int forceWorkSize = 64;
   boolean debug = false;
   int getworkRefresh = 5000;
 
   String source;
 
   boolean running = true;
-  
+
   Proxy proxy = null;
 
   List<DeviceState> deviceStates = new ArrayList<DeviceState>();
@@ -661,12 +661,12 @@ class DiabloMiner {
 
         JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
         	HttpURLConnection connection;
-        	
+
           if(proxy == null)
             connection = (HttpURLConnection) bitcoind.openConnection();
           else
             connection = (HttpURLConnection) bitcoind.openConnection(proxy);
-        		
+
           connection.setRequestProperty("Authorization", userPassword);
           connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
           connection.setDoOutput(true);
