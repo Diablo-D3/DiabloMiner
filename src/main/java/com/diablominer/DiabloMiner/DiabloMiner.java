@@ -38,6 +38,8 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
@@ -89,7 +91,8 @@ class DiabloMiner {
 
   AtomicLong currentBlocks = new AtomicLong(0);
   AtomicLong currentAttempts = new AtomicLong(0);
-
+  Set<String> enabledDevices = null;
+  
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 7500;
   final static int LOOPS = 1024;
@@ -116,6 +119,7 @@ class DiabloMiner {
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true, "bitcoin host port");
     options.addOption("g", "getwork", true, "seconds between getwork refresh");
+    options.addOption("D", "devices", true, "devices to enable");
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("d", "debug", false, "enable extra debug output");
@@ -167,6 +171,13 @@ class DiabloMiner {
 
     if(line.hasOption("port"))
       port = line.getOptionValue("port");
+
+    if(line.hasOption("devices")){
+      String devices[] = line.getOptionValue("devices").split(",");
+      enabledDevices = new HashSet<String>();
+      for(String s : devices)
+        enabledDevices.add(s);
+    }
 
     if(line.hasOption("proxy")) {
     	final String[] proxySettings = line.getOptionValue("proxy").split(":");
@@ -231,8 +242,9 @@ class DiabloMiner {
     }
 
     int count = 1;
+    int platformCount = 0;
 
-    for(CLPlatform platform : platforms) {
+    for(CLPlatform platform : platforms) {         
       List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
 
       if(devices == null) {
@@ -241,9 +253,11 @@ class DiabloMiner {
       }
 
       for (CLDevice device : devices) {
-        deviceStates.add(this.new DeviceState(platform, device, count));
+        if(enabledDevices == null || enabledDevices.contains(platformCount + "." + count) || enabledDevices.contains(""+count))
+          deviceStates.add(this.new DeviceState(platform, device, count));
         count++;
       }
+      platformCount++;
     }
 
     long previousHashCount = 0;
