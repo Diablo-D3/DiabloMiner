@@ -185,11 +185,17 @@ class DiabloMiner {
     }
 
     if(line.hasOption("url")) {
+      String protocol = "http";
+
       String[] split = line.getOptionValue("url").split("://");
+
+      if(split.length > 1)
+        protocol = split[0];
+
       split = split[split.length - 1].split("@");
 
       if(split.length > 1) {
-        url = "http://" + split[1];
+        url = protocol + "://" + split[1];
 
         split = split[0].split(":");
 
