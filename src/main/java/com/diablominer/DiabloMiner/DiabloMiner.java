@@ -106,30 +106,20 @@ class DiabloMiner {
     String pass = "miner";
     String ip = "127.0.0.1";
     String port = "8332";
+    String url = "url";
 
     Options options = new Options();
+    options.addOption("u", "user,", true, "bitcoin host username");
+    options.addOption("p", "pass", true, "bitcoin host password");
     options.addOption("f", "fps", true, "target execution timing");
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("o", "host", true, "bitcoin host IP");
-    options.addOption("r", "port", true," bitcoin host port");
+    options.addOption("r", "port", true, "bitcoin host port");
     options.addOption("g", "getwork", true, "seconds between getwork refresh");
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
+    options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("d", "debug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
-
-    Option option = OptionBuilder.create('u');
-    option.setLongOpt("user");
-    option.setArgs(1);
-    option.setDescription("username for host");
-    option.setRequired(true);
-    options.addOption(option);
-
-    option = OptionBuilder.create('p');
-    option.setLongOpt("pass");
-    option.setArgs(1);
-    option.setDescription("password for host");
-    option.setRequired(true);
-    options.addOption(option);
 
     PosixParser parser = new PosixParser();
 
@@ -140,6 +130,10 @@ class DiabloMiner {
 
       if(line.hasOption("help")) {
         throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
+      }
+
+      if(!line.hasOption("url") && (!line.hasOption("user") || !line.hasOption("pass"))) {
+        throw new ParseException("Requires either --url or --user and --pass");
       }
     } catch (ParseException e) {
       System.out.println(e.getLocalizedMessage() + "\n");
@@ -190,7 +184,26 @@ class DiabloMiner {
       }
     }
 
-    bitcoind = new URL("http://"+ ip + ":" + port + "/");
+    if(line.hasOption("url")) {
+      String[] split = line.getOptionValue("url").split("://");
+      split = split[split.length - 1].split("@");
+
+      if(split.length > 1) {
+        url = "http://" + split[1];
+
+        split = split[0].split(":");
+
+        user = split[0];
+        pass = split[split.length - 1];
+      } else {
+        url = line.getOptionValue("url");
+      }
+
+    } else {
+      url = "http://"+ ip + ":" + port + "/";
+    }
+
+    bitcoind = new URL(url);
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
@@ -200,6 +213,7 @@ class DiabloMiner {
     stream.close();
 
     info("Started");
+    info("Connecting to: " + url);
 
     CL.create();
 
