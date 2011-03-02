@@ -92,7 +92,7 @@ class DiabloMiner {
   AtomicLong currentBlocks = new AtomicLong(0);
   AtomicLong currentAttempts = new AtomicLong(0);
   Set<String> enabledDevices = null;
-  
+
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 7500;
   final static int LOOPS = 1024;
@@ -244,7 +244,7 @@ class DiabloMiner {
     int count = 1;
     int platformCount = 0;
 
-    for(CLPlatform platform : platforms) {         
+    for(CLPlatform platform : platforms) {
       List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
 
       if(devices == null) {
@@ -253,7 +253,7 @@ class DiabloMiner {
       }
 
       for (CLDevice device : devices) {
-        if(enabledDevices == null || enabledDevices.contains(platformCount + "." + count) || enabledDevices.contains(""+count))
+        if(enabledDevices == null || enabledDevices.contains(platformCount + "." + count) || enabledDevices.contains(Integer.toString(count)))
           deviceStates.add(this.new DeviceState(platform, device, count));
         count++;
       }
