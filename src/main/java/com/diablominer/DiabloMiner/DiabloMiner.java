@@ -112,7 +112,7 @@ class DiabloMiner {
     String url = "url";
 
     Options options = new Options();
-    options.addOption("u", "user,", true, "bitcoin host username");
+    options.addOption("u", "user", true, "bitcoin host username");
     options.addOption("p", "pass", true, "bitcoin host password");
     options.addOption("f", "fps", true, "target execution timing");
     options.addOption("w", "worksize", true, "override worksize");
