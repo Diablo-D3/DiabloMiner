@@ -46,8 +46,6 @@ import java.util.zip.InflaterInputStream;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
@@ -703,6 +701,7 @@ class DiabloMiner {
 
           connection.setRequestProperty("Authorization", userPassword);
           connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
+          connection.setRequestProperty("Content-Type", "application/json");
           connection.setDoOutput(true);
 
           OutputStream requestStream = connection.getOutputStream();
@@ -756,6 +755,13 @@ class DiabloMiner {
             IOException e2 = new IOException("Failed to communicate with Bitcoin: " + new String(error).trim());
             e2.setStackTrace(e.getStackTrace());
             throw e2;
+          }
+
+          if(responseMessage.get("error") != null) {
+            String error = responseMessage.get("error").getValueAsText().trim();
+
+            if(!"null".equals(error))
+              throw new IOException("Failed to communicate with Bitcoin: " + error);
           }
 
           return responseMessage.get("result");
