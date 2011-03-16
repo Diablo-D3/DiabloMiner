@@ -51,6 +51,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.codec.binary.Base64;
 import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.ObjectNode;
@@ -731,6 +732,7 @@ class DiabloMiner {
             responseStream.close();
           } catch (IOException e) {
             InputStream errorStream = null;
+            IOException e2;
 
             if(connection.getContentEncoding() != null) {
               if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
@@ -744,16 +746,21 @@ class DiabloMiner {
             if(errorStream == null)
               throw new IOException("Bitcoin disconnected during response");
 
-            byte[] error = new byte[1024];
+            byte[] error = new byte[2048];
             errorStream.read(error);
+
+            try {
+              responseMessage = (ObjectNode) mapper.readTree(new String(error).trim());
+              e2 = new IOException("Bitcoin returned error message: " + error);
+            } catch (JsonProcessingException f) {
+              e2 = new IOException("Failed to communicate with Bitcoin: " + new String(error).trim());
+            }
 
             errorStream.close();
 
             if(responseStream != null)
               responseStream.close();
 
-            IOException e2 = new IOException("Failed to communicate with Bitcoin: " + new String(error).trim());
-            e2.setStackTrace(e.getStackTrace());
             throw e2;
           }
 
@@ -761,7 +768,7 @@ class DiabloMiner {
             String error = responseMessage.get("error").getValueAsText().trim();
 
             if(!"null".equals(error))
-              throw new IOException("Failed to communicate with Bitcoin: " + error);
+              throw new IOException("Bitcoin returned error message: " + error);
           }
 
           return responseMessage.get("result");
