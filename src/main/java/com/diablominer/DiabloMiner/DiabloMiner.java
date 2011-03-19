@@ -746,7 +746,7 @@ class DiabloMiner {
             if(errorStream == null)
               throw new IOException("Bitcoin disconnected during response");
 
-            byte[] error = new byte[2048];
+            byte[] error = new byte[8192];
             errorStream.read(error);
 
             try {

@@ -65,6 +65,18 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
+        <configuration>
+          <artifactItems>
+            <artifactItem>
+              <groupId>org.lwjgl</groupId>
+              <artifactId>lwjgl-native</artifactId>
+              <version>${lwjgl.version}</version>
+              <type>jar</type>
+              <outputDirectory>${project.build.directory}/libs/natives</outputDirectory>
+              <overWrite>true</overWrite>
+            </artifactItem>
+          </artifactItems>
+        </configuration>
         <executions>
           <execution>
             <id>copy-dependencies</id>
@@ -79,24 +91,6 @@
               <overWriteIfNewer>true</overWriteIfNewer>
             </configuration>
           </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
-        <configuration>
-          <artifactItems>
-            <artifactItem>
-              <groupId>org.lwjgl</groupId>
-              <artifactId>lwjgl-native</artifactId>
-              <version>${lwjgl.version}</version>
-              <type>jar</type>
-              <outputDirectory>${project.build.directory}/libs/natives</outputDirectory>
-              <overWrite>true</overWrite>
-            </artifactItem>
-          </artifactItems>
-        </configuration>
-        <executions>
           <execution>
             <id>unpack</id>
             <phase>generate-resources</phase>
