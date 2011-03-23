@@ -687,7 +687,7 @@ class DiabloMiner {
           try {
             return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
           } catch(IOException e) {
-            error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+            error("Connection failed: " + e.getLocalizedMessage());
             return false;
           }
         }
@@ -751,9 +751,9 @@ class DiabloMiner {
 
             try {
               responseMessage = (ObjectNode) mapper.readTree(new String(error).trim());
-              e2 = new IOException("Bitcoin returned error message: " + error);
+              e2 = new IOException("Bitcoin returned error message: " + responseMessage.get("error").getValueAsText().trim());
             } catch (JsonProcessingException f) {
-              e2 = new IOException("Failed to communicate with Bitcoin: " + new String(error).trim());
+              e2 = new IOException("Failed to connect to Bitcoin: " + new String(error).trim());
             }
 
             errorStream.close();
