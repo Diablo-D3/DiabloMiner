@@ -752,7 +752,7 @@ class DiabloMiner {
             try {
               responseMessage = (ObjectNode) mapper.readTree(new String(error).trim());
               e2 = new IOException("Bitcoin returned error message: " + responseMessage.get("error").getValueAsText().trim());
-            } catch (JsonProcessingException f) {
+            } catch (Exception f) {
               e2 = new IOException("Failed to connect to Bitcoin: " + new String(error).trim());
             }
 
