@@ -51,7 +51,6 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.codec.binary.Base64;
 import org.codehaus.jackson.JsonNode;
-import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.ObjectNode;
@@ -349,6 +348,8 @@ class DiabloMiner {
 
     long workSize;
     long workSizeBase;
+    long workSizeMin;
+
     final PointerBuffer localWorkSize = BufferUtils.createPointerBuffer(1);
 
     final ExecutionState executions[] = new ExecutionState[EXECUTION_TOTAL];;
@@ -435,7 +436,8 @@ class DiabloMiner {
       info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
 
       workSizeBase = localWorkSize.get(0) * ((LOOPS + 1) - loops);
-      workSize = workSizeBase;
+      workSizeMin = workSizeBase * deviceCU;
+      workSize = workSizeMin;
 
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
@@ -460,8 +462,8 @@ class DiabloMiner {
         else if(basis > targetBasis && workSize > workSizeBase + workSizeBase)
           workSize -= workSizeBase;
 
-        if(workSize < workSizeBase)
-          workSize = workSizeBase;
+        if(workSize < workSizeMin)
+          workSize = workSizeMin;
 
         lastRuns = runs.get();
       }
@@ -469,8 +471,8 @@ class DiabloMiner {
 
     class ExecutionState implements Runnable {
       CLCommandQueue queue;
-      final ByteBuffer buffer;
-      final CLMem output;
+      ByteBuffer buffer;
+      CLMem output;
 
       final int[] midstate2 = new int[16];
 
@@ -479,7 +481,7 @@ class DiabloMiner {
       final ByteBuffer digestInput = ByteBuffer.allocate(80);
       byte[] digestOutput;
 
-      final GetWorkParser currentWork;
+      final GetWorkParser currentWork = this.new GetWorkParser();;
 
       final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
 
@@ -487,30 +489,37 @@ class DiabloMiner {
       int err;
 
       ExecutionState() throws NoSuchAlgorithmException {
-        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
-        buffer = BufferUtils.createByteBuffer(4 * OUTPUTS);
-        buffer.putInt(0, 0);
-
-        currentWork = this.new GetWorkParser();
       }
 
-      public void run() {
-        queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);
-        if(queue == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-          error("Failed to allocate queue");
-          System.exit(0);
+      public void createBuffers() {
+        buffer = BufferUtils.createByteBuffer(4 * OUTPUTS);
+
+        for(int z = 0; z < OUTPUTS; z++) {
+          buffer.putInt(z * 4, 0);
         }
 
-        CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
 
         if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
           error("Failed to allocate output buffer");
           System.exit(0);
         }
 
+        CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
+      }
+
+      public void run() {
+        queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);
+
+        if(queue == null || errBuf.get(0) != CL10.CL_SUCCESS) {
+          error("Failed to allocate queue");
+          System.exit(0);
+        }
+
+        createBuffers();
+
         while(running = true) {
           boolean submittedBlock = false;
-          boolean updateBuffer = false;
 
           for(int z = 0; z < OUTPUTS; z++) {
             int nonce = buffer.getInt(z * 4);
@@ -549,19 +558,16 @@ class DiabloMiner {
                   error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
                 }
               }
-
-              buffer.putInt(z * 4, 0);
-              updateBuffer = true;
             }
           }
-
-          if(updateBuffer == true)
-            CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
 
           if(submittedBlock == true) {
             debug("Forcing getwork update due to block submission");
             currentWork.forceUpdate();
           }
+
+          CL10.clReleaseMemObject(output);
+          createBuffers();
 
           workSizeTemp.put(0, workSize);
           currentWork.update(workSizeTemp.get(0));
