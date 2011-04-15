@@ -471,8 +471,9 @@ class DiabloMiner {
 
     class ExecutionState implements Runnable {
       CLCommandQueue queue;
-      ByteBuffer buffer;
-      CLMem output;
+      final ByteBuffer buffer[] = new ByteBuffer[2];
+      final CLMem output[] = new CLMem[2];
+      int bufferIndex = 0;
 
       final int[] midstate2 = new int[16];
 
@@ -491,23 +492,6 @@ class DiabloMiner {
       ExecutionState() throws NoSuchAlgorithmException {
       }
 
-      public void createBuffers() {
-        buffer = BufferUtils.createByteBuffer(4 * OUTPUTS);
-
-        for(int z = 0; z < OUTPUTS; z++) {
-          buffer.putInt(z * 4, 0);
-        }
-
-        output = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
-
-        if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-          error("Failed to allocate output buffer");
-          System.exit(0);
-        }
-
-        CL10.clEnqueueWriteBuffer(queue, output, CL10.CL_FALSE, 0, buffer, null, null);
-      }
-
       public void run() {
         queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);
 
@@ -516,13 +500,37 @@ class DiabloMiner {
           System.exit(0);
         }
 
-        createBuffers();
+        buffer[0] = BufferUtils.createByteBuffer(4 * OUTPUTS);
+        buffer[1] = BufferUtils.createByteBuffer(4 * OUTPUTS);
+
+        for(int z = 0; z < OUTPUTS; z++) {
+          buffer[0].putInt(z * 4, 0);
+          buffer[1].putInt(z * 4, 0);
+        }
+
+        output[0] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
+
+        if(output[0] == null || errBuf.get(0) != CL10.CL_SUCCESS) {
+          error("Failed to allocate output buffer");
+          System.exit(0);
+        }
+
+        output[1] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
+
+        if(output[1] == null || errBuf.get(0) != CL10.CL_SUCCESS) {
+          error("Failed to allocate output buffer");
+          System.exit(0);
+        }
+
+        CL10.clEnqueueWriteBuffer(queue, output[0], CL10.CL_FALSE, 0, buffer[0], null, null);
+        CL10.clEnqueueWriteBuffer(queue, output[1], CL10.CL_FALSE, 0, buffer[1], null, null);
 
         while(running = true) {
           boolean submittedBlock = false;
+          boolean updateBuffer = false;
 
           for(int z = 0; z < OUTPUTS; z++) {
-            int nonce = buffer.getInt(z * 4);
+            int nonce = buffer[bufferIndex].getInt(z * 4);
 
             if(nonce > 0) {
               for(int j = 0; j < 19; j++)
@@ -558,16 +566,24 @@ class DiabloMiner {
                   error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
                 }
               }
+
+              buffer[bufferIndex].putInt(z * 4, 0);
+              updateBuffer = true;
             }
           }
+
+          if(updateBuffer)
+            CL10.clEnqueueWriteBuffer(queue, output[bufferIndex], CL10.CL_FALSE, 0, buffer[bufferIndex], null, null);
 
           if(submittedBlock == true) {
             debug("Forcing getwork update due to block submission");
             currentWork.forceUpdate();
           }
 
-          CL10.clReleaseMemObject(output);
-          createBuffers();
+          if(bufferIndex != 0)
+            bufferIndex = 0;
+          else
+            bufferIndex = 1;
 
           workSizeTemp.put(0, workSize);
           currentWork.update(workSizeTemp.get(0));
@@ -615,10 +631,10 @@ class DiabloMiner {
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
                 .setArg(22, (int) currentWork.base)
-                .setArg(23, output);
+                .setArg(23, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
-          CL10.clEnqueueReadBuffer(queue, output, CL10.CL_TRUE, 0, buffer, null, null);
+          CL10.clEnqueueReadBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
 
           if(err !=  CL10.CL_SUCCESS) {
             if(err != CL10.CL_INVALID_KERNEL_ARGS) {
@@ -739,6 +755,9 @@ class DiabloMiner {
           } catch (IOException e) {
             InputStream errorStream = null;
             IOException e2;
+
+            if(connection.getErrorStream() == null)
+              throw new IOException("Bitcoin disconnected during response");
 
             if(connection.getContentEncoding() != null) {
               if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
