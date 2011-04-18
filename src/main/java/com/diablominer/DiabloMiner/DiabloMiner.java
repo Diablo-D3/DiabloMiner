@@ -790,10 +790,14 @@ class DiabloMiner {
           }
 
           if(responseMessage.get("error") != null) {
-            String error = responseMessage.get("error").getValueAsText().trim();
+            if(responseMessage.get("error").getValueAsText() != null) {
+              String error = responseMessage.get("error").getValueAsText().trim();
 
-            if(!"null".equals(error))
-              throw new IOException("Bitcoin returned error message: " + error);
+              if(!"null".equals(error))
+                throw new IOException("Bitcoin returned error message: " + error);
+            } else {
+              throw new IOException("Bitcoin disconnected during response");
+            }
           }
 
           return responseMessage.get("result");
