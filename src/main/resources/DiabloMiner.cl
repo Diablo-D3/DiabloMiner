@@ -1,7 +1,5 @@
 // ArtForz's kernel
 
-#define LOOPS 1024
-
 #if BITALIGN
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
 #define rotr(x, n) amd_bitalign((uint)(x), (uint)(x), (uint)n)
