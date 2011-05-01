@@ -711,7 +711,7 @@ class DiabloMiner {
         }
 
         void update(long delta) {
-          if(longpoll) {
+          if(longpoll && longpollIncoming.get() != null) {
             getWorkAsync();
           } else if(base + delta > Integer.MAX_VALUE) {
             debug("Forcing getwork update due to nonce saturation");
@@ -734,13 +734,12 @@ class DiabloMiner {
 
         void getWorkAsync() {
           JsonNode json = longpollIncoming.get();
-          if(json != null) {
-            parse(json);
-            lastPulled = getNow();
-            base = 0;
 
-            longpollIncoming.set(null);
-          }
+          parse(json);
+          lastPulled = getNow();
+          base = 0;
+
+          longpollIncoming.set(null);
         }
 
         boolean sendWork(int nonce) {
