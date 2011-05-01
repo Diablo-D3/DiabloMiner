@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -51,6 +52,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.codec.binary.Base64;
 import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
 import org.codehaus.jackson.node.ObjectNode;
@@ -69,11 +71,11 @@ import org.lwjgl.opencl.CLProgram;
 
 class DiabloMiner {
   URL bitcoind;
+  URL bitcoindLongpoll;
   String userPass;
   float targetFPS = 60;
   int forceWorkSize = 64;
   boolean debug = false;
-  boolean extradebug = false;
   int getworkRefresh = 5000;
   int zloops = 0;
 
@@ -125,7 +127,6 @@ class DiabloMiner {
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("z", "loops", true, "kernel loops (power of two, 0 is off)");
     options.addOption("d", "debug", false, "enable debug output");
-    options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
 
     PosixParser parser = new PosixParser();
@@ -168,9 +169,6 @@ class DiabloMiner {
 
     if(line.hasOption("debug"))
       debug = true;
-
-    if(line.hasOption("edebug"))
-      extradebug = true;
 
     if(line.hasOption("host"))
       ip = line.getOptionValue("host");
@@ -284,7 +282,7 @@ class DiabloMiner {
 
       if(now - startTime > TIME_OFFSET * 2) {
         long averageHashCount = (adjustedHashCount + previousAdjustedHashCount) / 2;
-        if(extradebug) {
+        if(debug) {
           System.out.print("\r" + averageHashCount + "/" + hashLongCount + " khash/sec | ghash: ");
 
           for(int i = 0; i < deviceStates.size(); i++)
@@ -501,6 +499,8 @@ class DiabloMiner {
       final CLMem output[] = new CLMem[2];
       int bufferIndex = 0;
 
+      boolean longpoll = false;
+
       final int[] midstate2 = new int[16];
 
       final MessageDigest digestInside = MessageDigest.getInstance("SHA-256");
@@ -551,7 +551,7 @@ class DiabloMiner {
         CL10.clEnqueueWriteBuffer(queue, output[0], CL10.CL_FALSE, 0, buffer[0], null, null);
         CL10.clEnqueueWriteBuffer(queue, output[1], CL10.CL_FALSE, 0, buffer[1], null, null);
 
-        while(running = true) {
+        while(running) {
           boolean submittedBlock = false;
           boolean updateBuffer = false;
 
@@ -594,15 +594,20 @@ class DiabloMiner {
 
               buffer[bufferIndex].putInt(z * 4, 0);
               updateBuffer = true;
+
+              if(submittedBlock)
+                break;
             }
           }
 
           if(updateBuffer)
             CL10.clEnqueueWriteBuffer(queue, output[bufferIndex], CL10.CL_FALSE, 0, buffer[bufferIndex], null, null);
 
-          if(submittedBlock == true) {
-            debug("Forcing getwork update due to block submission");
-            currentWork.forceUpdate();
+          if(submittedBlock) {
+            if(!longpoll) {
+              debug("Forcing getwork update due to block submission");
+              currentWork.forceUpdate();
+            }
           }
 
           if(bufferIndex != 0)
@@ -611,7 +616,7 @@ class DiabloMiner {
             bufferIndex = 1;
 
           workSizeTemp.put(0, workSize);
-          currentWork.update(workSizeTemp.get(0));
+          currentWork.update(workSizeTemp.get(0) * loops);
 
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
 
@@ -655,7 +660,7 @@ class DiabloMiner {
                 .setArg(19, midstate2[5])
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
-                .setArg(22, (int) currentWork.base)
+                .setArg(22, (int) currentWork.base / loops)
                 .setArg(23, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
@@ -671,7 +676,7 @@ class DiabloMiner {
           } else {
             hashCount.addAndGet(workSizeTemp.get(0) * loops);
             deviceHashCount.addAndGet(workSizeTemp.get(0) * loops);
-            currentWork.base += workSizeTemp.get(0);
+            currentWork.base += workSizeTemp.get(0) * loops;
             runs.incrementAndGet();
           }
         }
@@ -687,6 +692,8 @@ class DiabloMiner {
 
         long lastPulled = 0;
         long base = 0;
+
+        AtomicReference<JsonNode> longpollIncoming = new AtomicReference<JsonNode>(null);
 
         GetWorkParser() {
           getworkMessage.put("method", "getwork");
@@ -704,7 +711,9 @@ class DiabloMiner {
         }
 
         void update(long delta) {
-          if(base + delta > Integer.MAX_VALUE / loops) {
+          if(longpoll) {
+            getWorkAsync();
+          } else if(base + delta > Integer.MAX_VALUE) {
             debug("Forcing getwork update due to nonce saturation");
             getWork();
           } else if(lastPulled + getworkRefresh < getNow()) {
@@ -721,6 +730,17 @@ class DiabloMiner {
 
           lastPulled = getNow();
           base = 0;
+        }
+
+        void getWorkAsync() {
+          JsonNode json = longpollIncoming.get();
+          if(json != null) {
+            parse(json);
+            lastPulled = getNow();
+            base = 0;
+
+            longpollIncoming.set(null);
+          }
         }
 
         boolean sendWork(int nonce) {
@@ -764,6 +784,22 @@ class DiabloMiner {
           InputStream responseStream = null;
 
           try {
+            if(longpoll == false) {
+              String xlongpolling = connection.getHeaderField("X-Long-Polling");
+
+              if(xlongpolling != null) {
+                bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
+                      bitcoind.getFile() + xlongpolling);
+                getworkRefresh = 60000;
+                longpoll = true;
+
+                debug("Enabling long poll support");
+
+                new Thread(new getWorkAsync(), "DiabloMiner Long Poll for " +
+                      Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
+              }
+            }
+
             if(connection.getContentEncoding() != null) {
               if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
                 responseStream = new GZIPInputStream(connection.getInputStream());
@@ -774,16 +810,19 @@ class DiabloMiner {
             }
 
             if(responseStream == null)
-              throw new IOException("Bitcoin disconnected during response");
+              throw new IOException("Drop to error handler");
 
             responseMessage = (ObjectNode) mapper.readTree(responseStream);
             responseStream.close();
+          } catch (JsonProcessingException e) {
+            throw new IOException("Bitcoin returned unparsable JSON");
           } catch (IOException e) {
             InputStream errorStream = null;
             IOException e2;
 
             if(connection.getErrorStream() == null)
-              throw new IOException("Bitcoin disconnected during response");
+              throw new IOException("Bitcoin disconnected during response: "
+                    + connection.getResponseCode() + " " + connection.getResponseMessage());
 
             if(connection.getContentEncoding() != null) {
               if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
@@ -795,16 +834,34 @@ class DiabloMiner {
             }
 
             if(errorStream == null)
-              throw new IOException("Bitcoin disconnected during response");
+              throw new IOException("Bitcoin disconnected during response: "
+                  + connection.getResponseCode() + " " + connection.getResponseMessage());
 
-            byte[] error = new byte[8192];
-            errorStream.read(error);
+            byte[] errorbuf = new byte[8192];
+            errorStream.read(errorbuf);
+            String error = new String(errorbuf).trim();
 
-            try {
-              responseMessage = (ObjectNode) mapper.readTree(new String(error).trim());
-              e2 = new IOException("Bitcoin returned error message: " + responseMessage.get("error").getValueAsText().trim());
-            } catch (Exception f) {
-              e2 = new IOException("Failed to connect to Bitcoin: " + new String(error).trim());
+            if(error.startsWith("{")) {
+              try {
+                responseMessage = (ObjectNode) mapper.readTree(error);
+
+                e2 = new IOException("Bitcoin returned error message: "
+                      + responseMessage.get("error").getValueAsText().trim());
+                if(responseMessage.get("error").get("message") != null &&
+                      responseMessage.get("error").get("message").getValueAsText() != null) {
+                  error = responseMessage.get("error").get("message").getValueAsText().trim();
+                    throw new IOException("Bitcoin returned error message: " + error);
+                } else if(responseMessage.get("error").getValueAsText() != null) {
+                  error = responseMessage.get("error").getValueAsText().trim();
+
+                  if(!"null".equals(error) && !"".equals(error))
+                    throw new IOException("Bitcoin returned error message: " + error);
+                }
+              } catch(JsonProcessingException f) {
+                e2 = new IOException("Bitcoin returned unparsable JSON");
+              }
+            } else {
+              e2 = new IOException("Bitcoin returned error message: " + error);
             }
 
             errorStream.close();
@@ -816,17 +873,24 @@ class DiabloMiner {
           }
 
           if(responseMessage.get("error") != null) {
-            if(responseMessage.get("error").getValueAsText() != null) {
+            if(responseMessage.get("error").get("message") != null &&
+                  responseMessage.get("error").get("message").getValueAsText() != null) {
+              String error = responseMessage.get("error").get("message").getValueAsText().trim();
+                throw new IOException("Bitcoin returned error message: " + error);
+            } else if(responseMessage.get("error").getValueAsText() != null) {
               String error = responseMessage.get("error").getValueAsText().trim();
 
-              if(!"null".equals(error))
+              if(!"null".equals(error) && !"".equals(error))
                 throw new IOException("Bitcoin returned error message: " + error);
-            } else {
-              throw new IOException("Bitcoin disconnected during response");
             }
           }
 
-          return responseMessage.get("result");
+          JsonNode result = responseMessage.get("result");
+
+          if(result == null)
+            throw new IOException("Bitcoin did not return a result or an error");
+
+          return result;
         }
 
         void parse(JsonNode responseMessage) {
@@ -857,6 +921,22 @@ class DiabloMiner {
             builder.append(String.format("%08x", Integer.reverseBytes(d)));
 
           return builder.toString();
+        }
+
+        class getWorkAsync implements Runnable {
+          public void run() {
+            while(running) {
+              try {
+                longpollIncoming.set(doJSONRPC(bitcoindLongpoll, userPass, mapper, getworkMessage));
+                debug("Long poll getwork returned");
+              } catch(IOException e) {
+                error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+              }
+
+              while(longpollIncoming.get() != null)
+                Thread.yield();
+            }
+          }
         }
       }
     }
