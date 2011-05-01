@@ -594,9 +594,6 @@ class DiabloMiner {
 
               buffer[bufferIndex].putInt(z * 4, 0);
               updateBuffer = true;
-
-              if(submittedBlock)
-                break;
             }
           }
 
