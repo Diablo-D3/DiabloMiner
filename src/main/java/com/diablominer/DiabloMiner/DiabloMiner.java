@@ -76,6 +76,7 @@ class DiabloMiner {
   float targetFPS = 60;
   int forceWorkSize = 64;
   boolean debug = false;
+  boolean edebug = false;
   int getworkRefresh = 5000;
   int zloops = 0;
 
@@ -127,6 +128,7 @@ class DiabloMiner {
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("z", "loops", true, "kernel loops (power of two, 0 is off)");
     options.addOption("d", "debug", false, "enable debug output");
+    options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
 
     PosixParser parser = new PosixParser();
@@ -169,6 +171,9 @@ class DiabloMiner {
 
     if(line.hasOption("debug"))
       debug = true;
+
+    if(line.hasOption("edebug"))
+      edebug = true;
 
     if(line.hasOption("host"))
       ip = line.getOptionValue("host");
@@ -342,6 +347,11 @@ class DiabloMiner {
 
   void debug(String msg) {
     if(debug)
+      System.out.println("\r" + getDateTime() + " DEBUG: " + msg);
+  }
+
+  void edebug(String msg) {
+    if(edebug)
       System.out.println("\r" + getDateTime() + " DEBUG: " + msg);
   }
 
@@ -576,7 +586,7 @@ class DiabloMiner {
                     (0x000000FF & ((int)digestOutput[29])) << 8 |
                     (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
 
-              debug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
+              edebug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
 
               if(G <= currentWork.target[6]) {
                 if(H == 0) {
@@ -602,7 +612,7 @@ class DiabloMiner {
 
           if(submittedBlock) {
             if(!longpoll) {
-              debug("Forcing getwork update due to block submission");
+              edebug("Forcing getwork update due to block submission");
               currentWork.forceUpdate();
             }
           }
@@ -785,7 +795,7 @@ class DiabloMiner {
 
               if(xlongpolling != null) {
                 bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
-                      bitcoind.getFile() + xlongpolling);
+                      (bitcoind.getFile() + xlongpolling).replace("//", "/"));
                 getworkRefresh = 60000;
                 longpoll = true;
 
