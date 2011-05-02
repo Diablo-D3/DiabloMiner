@@ -824,7 +824,7 @@ class DiabloMiner {
             throw new IOException("Bitcoin returned unparsable JSON");
           } catch (IOException e) {
             InputStream errorStream = null;
-            IOException e2;
+            IOException e2 = null;
 
             if(connection.getErrorStream() == null)
               throw new IOException("Bitcoin disconnected during response: "
@@ -851,17 +851,17 @@ class DiabloMiner {
               try {
                 responseMessage = (ObjectNode) mapper.readTree(error);
 
-                e2 = new IOException("Bitcoin returned error message: "
-                      + responseMessage.get("error").getValueAsText().trim());
-                if(responseMessage.get("error").get("message") != null &&
-                      responseMessage.get("error").get("message").getValueAsText() != null) {
-                  error = responseMessage.get("error").get("message").getValueAsText().trim();
-                    throw new IOException("Bitcoin returned error message: " + error);
-                } else if(responseMessage.get("error").getValueAsText() != null) {
-                  error = responseMessage.get("error").getValueAsText().trim();
+                if(responseMessage.get("error") != null) {
+                  if(responseMessage.get("error").get("message") != null &&
+                        responseMessage.get("error").get("message").getValueAsText() != null) {
+                    error = responseMessage.get("error").get("message").getValueAsText().trim();
+                    e2 = new IOException("Bitcoin returned error message: " + error);
+                  } else if(responseMessage.get("error").getValueAsText() != null) {
+                    error = responseMessage.get("error").getValueAsText().trim();
 
-                  if(!"null".equals(error) && !"".equals(error))
-                    throw new IOException("Bitcoin returned error message: " + error);
+                    if(!"null".equals(error) && !"".equals(error))
+                      e2 = new IOException("Bitcoin returned error message: " + error);
+                  }
                 }
               } catch(JsonProcessingException f) {
                 e2 = new IOException("Bitcoin returned unparsable JSON");
@@ -874,6 +874,9 @@ class DiabloMiner {
 
             if(responseStream != null)
               responseStream.close();
+
+            if(e2 == null)
+              e2 = new IOException("Bitcoin returned an error, but with no message");
 
             throw e2;
           }
