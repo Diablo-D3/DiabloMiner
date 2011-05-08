@@ -794,8 +794,15 @@ class DiabloMiner {
               String xlongpolling = connection.getHeaderField("X-Long-Polling");
 
               if(xlongpolling != null) {
-                bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
-                      (bitcoind.getFile() + xlongpolling).replace("//", "/"));
+                if(xlongpolling.startsWith("http"))
+                  bitcoindLongpoll = new URL(xlongpolling);
+                else if(xlongpolling.startsWith("/"))
+                  bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
+                        xlongpolling);
+                else
+                  bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
+                        (bitcoind.getFile() + "/" + xlongpolling).replace("//", "/"));
+
                 getworkRefresh = 60000;
                 longpoll = true;
 
