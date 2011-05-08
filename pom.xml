@@ -23,6 +23,7 @@
       <url>file:${basedir}/contrib/lwjgl</url>
     </repository>
   </repositories>
+  
   <dependencies>
     <dependency>
       <groupId>org.lwjgl</groupId>
@@ -63,6 +64,34 @@
       </plugin>
 
       <plugin>
+        <groupId>org.bluestemsoftware.open.maven.plugin</groupId>
+        <artifactId>launch4j-plugin</artifactId>
+        <version>1.5.0.0</version>
+        <executions>
+          <execution>
+            <id>windows binary</id>
+            <phase>package</phase>
+            <goals>
+              <goal>launch4j</goal>
+            </goals>
+            <configuration>
+              <headerType>console</headerType>
+              <outfile>DiabloMiner-Windows.exe</outfile>
+              <jar>target/DiabloMiner.jar</jar>
+              <errTitle>DiabloMiner</errTitle>
+              <classPath>
+                <mainClass>com.diablominer.DiabloMiner.DiabloMiner</mainClass>
+                <preCp>%EXEDIR%\target\libs\*</preCp>
+              </classPath>
+              <jre>
+                <minVersion>1.6.0</minVersion>
+              </jre>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <configuration>
@@ -99,6 +128,14 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <finalName>DiabloMiner</finalName>
+        </configuration>
       </plugin>
     </plugins>
   </build>

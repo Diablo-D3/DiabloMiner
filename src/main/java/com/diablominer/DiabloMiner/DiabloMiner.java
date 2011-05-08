@@ -74,7 +74,7 @@ class DiabloMiner {
   URL bitcoindLongpoll;
   String userPass;
   float targetFPS = 60;
-  int forceWorkSize = 64;
+  int forceWorkSize = 0;
   boolean debug = false;
   boolean edebug = false;
   int getworkRefresh = 5000;
