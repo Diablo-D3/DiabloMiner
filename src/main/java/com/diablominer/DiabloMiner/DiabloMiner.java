@@ -75,6 +75,7 @@ class DiabloMiner {
   String userPass;
   float targetFPS = 60;
   int forceWorkSize = 0;
+  int vectors = 1;
   boolean debug = false;
   boolean edebug = false;
   int getworkRefresh = 5000;
@@ -83,6 +84,7 @@ class DiabloMiner {
   String source;
 
   boolean running = true;
+  Thread mainThread;
 
   Proxy proxy = null;
 
@@ -99,7 +101,6 @@ class DiabloMiner {
 
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 7500;
-  final static int LOOPS = 1024;
   final static int OUTPUTS = 256;
 
   public static void main(String [] args) throws Exception {
@@ -109,6 +110,8 @@ class DiabloMiner {
   }
 
   void execute(String[] args) throws Exception {
+    mainThread = Thread.currentThread();
+
     String user = "diablo";
     String pass = "miner";
     String ip = "127.0.0.1";
@@ -126,7 +129,8 @@ class DiabloMiner {
     options.addOption("D", "devices", true, "devices to enable");
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
     options.addOption("l", "url", true, "bitcoin host url");
-    options.addOption("z", "loops", true, "kernel loops (power of two, 0 is off)");
+    options.addOption("z", "loops", true, "kernel loops (PoT exp, 0 is off)");
+    options.addOption("v", "vectors", false, "force vectors in kernel");
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
@@ -183,6 +187,9 @@ class DiabloMiner {
 
     if(line.hasOption("loops"))
       zloops = (int) Math.pow(2, Integer.parseInt(line.getOptionValue("loops")));
+
+    if(line.hasOption("vectors"))
+      vectors = 2;
 
     if(line.hasOption("devices")){
       String devices[] = line.getOptionValue("devices").split(",");
@@ -311,7 +318,7 @@ class DiabloMiner {
         else
           Thread.sleep(1);
       } catch (InterruptedException e) {
-        running = false;
+        // do nothing
       }
     }
   }
@@ -343,20 +350,26 @@ class DiabloMiner {
 
   void info(String msg) {
     System.out.println("\r" + getDateTime() + " " + msg);
+    mainThread.interrupt();
   }
 
   void debug(String msg) {
-    if(debug)
+    if(debug) {
       System.out.println("\r" + getDateTime() + " DEBUG: " + msg);
+      mainThread.interrupt();
+    }
   }
 
   void edebug(String msg) {
-    if(edebug)
+    if(edebug) {
       System.out.println("\r" + getDateTime() + " DEBUG: " + msg);
+      mainThread.interrupt();
+    }
   }
 
   void error(String msg) {
     System.err.println("\r" + getDateTime() + " ERROR: " + msg);
+    mainThread.interrupt();
   }
 
   long getNow() {
@@ -383,6 +396,7 @@ class DiabloMiner {
 
     AtomicLong runs = new AtomicLong(0);
     long lastRuns = 0;
+    long lastTime = startTime;
 
     boolean hasBitAlign = false;
     int loops = 1;
@@ -411,7 +425,6 @@ class DiabloMiner {
 
       if(new String(exta).contains("cl_amd_media_ops")) {
         hasBitAlign = true;
-        loops = LOOPS;
       }
 
       if(zloops > 1)
@@ -424,13 +437,13 @@ class DiabloMiner {
       if(hasBitAlign)
         compileOptions += " -D BITALIGN";
 
+      if(vectors > 1)
+        compileOptions += " -D VECTORS";
+
       if(loops > 1) {
         compileOptions += " -D DOLOOPS";
         compileOptions += " -D LOOPS=" + loops;
       }
-
-      if(forceWorkSize > 0)
-        compileOptions += " -D WORKGROUPSIZE=" + forceWorkSize;
 
       program = CL10.clCreateProgramWithSource(context, source, null);
       err = CL10.clBuildProgram(program, device, compileOptions, null);
@@ -469,9 +482,9 @@ class DiabloMiner {
 
       info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
 
-      workSizeBase = (long) (localWorkSize.get(0) * ((float)LOOPS / (float)loops) * deviceCU);
+      workSizeBase = localWorkSize.get(0) * deviceCU;
 
-      workSize = workSizeBase;
+      workSize = workSizeBase * 32;
 
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
@@ -481,25 +494,24 @@ class DiabloMiner {
 
     void checkDevice() {
       long now = getNow();
-      long elapsed = now - startTime;
+      long elapsed = now - lastTime;
+      long currentRuns = runs.get();
 
-      if(now > startTime + TIME_OFFSET && runs.get() > lastRuns + targetFPS) {
-        float basis = elapsed / runs.get();
-        float targetBasis = 1000 / (targetFPS * EXECUTION_TOTAL);
+      if(now > startTime + TIME_OFFSET && currentRuns > lastRuns + targetFPS) {
+        double basis = (double)elapsed / (double)(currentRuns - lastRuns);
+        double targetBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
 
-        if(basis < targetBasis / 2 && Integer.MAX_VALUE / loops > workSize + (workSizeBase * workSizeBase))
-          workSize += workSizeBase * workSizeBase;
-        else if(basis < targetBasis && Integer.MAX_VALUE / loops > workSize + workSizeBase)
+        if(basis < targetBasis / 2 && Integer.MAX_VALUE / loops / vectors > workSize + (workSizeBase * 10))
+          workSize += workSizeBase * 10;
+        else if(basis < targetBasis && Integer.MAX_VALUE / loops /vectors > workSize + workSizeBase)
           workSize += workSizeBase;
-        else if(basis > targetBasis * 2 && workSize > (workSizeBase * workSizeBase) + workSizeBase)
-          workSize -= workSizeBase * workSizeBase;
-        else if(basis > targetBasis && workSize > workSizeBase + workSizeBase)
+        else if(basis > targetBasis * 2 && workSize > (workSizeBase * 10) + workSizeBase)
+          workSize -= workSizeBase * 10;
+        else if(basis > targetBasis && workSize > workSizeBase)
           workSize -= workSizeBase;
 
-        if(workSize < workSizeBase)
-          workSize = workSizeBase;
-
-        lastRuns = runs.get();
+        lastRuns = currentRuns;
+        lastTime = now;
       }
     }
 
@@ -623,7 +635,7 @@ class DiabloMiner {
             bufferIndex = 1;
 
           workSizeTemp.put(0, workSize);
-          currentWork.update(workSizeTemp.get(0) * loops);
+          currentWork.update(workSizeTemp.get(0) * loops * vectors);
 
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
 
@@ -667,7 +679,7 @@ class DiabloMiner {
                 .setArg(19, midstate2[5])
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
-                .setArg(22, (int) currentWork.base / loops)
+                .setArg(22, (int) currentWork.base / loops / vectors)
                 .setArg(23, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
@@ -681,9 +693,9 @@ class DiabloMiner {
               debug("Spurious CL_INVALID_KERNEL_ARGS, ignoring");
             }
           } else {
-            hashCount.addAndGet(workSizeTemp.get(0) * loops);
-            deviceHashCount.addAndGet(workSizeTemp.get(0) * loops);
-            currentWork.base += workSizeTemp.get(0) * loops;
+            hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
+            deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
+            currentWork.base += workSizeTemp.get(0) * loops * vectors;
             runs.incrementAndGet();
           }
         }
