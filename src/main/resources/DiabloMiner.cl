@@ -42,17 +42,19 @@ __kernel __attribute__((vec_type_hint(u))) void search(
 {
   u A, B, C, D, E, F, G, H;
   u W0, W1, W2, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12, W13, W14, W15;
-  u nonce;
+  u nonce = base + get_global_id(0);
+  
+  #ifdef DOLOOPS
+  nonce *= (u)LOOPS;
+  #endif
 
   #ifdef VECTORS
-  nonce = base + get_global_id(0) + (uint2)(0, 0x80000000U);
-  #else
-  nonce = base + get_global_id(0);
+  nonce += (uint2)(0, 0x80000000U);
   #endif
 
   #ifdef DOLOOPS
   uint it;
-  const u loopnonce = nonce * (u)LOOPS;
+  const u loopnonce = nonce;
   for(it = 0; it != LOOPS; it++) {
     nonce = it ^ loopnonce;
   #endif

@@ -102,6 +102,7 @@ class DiabloMiner {
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 7500;
   final static int OUTPUTS = 256;
+  final static long TWO32 = 4294967295L;
 
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
@@ -176,8 +177,10 @@ class DiabloMiner {
     if(line.hasOption("debug"))
       debug = true;
 
-    if(line.hasOption("edebug"))
+    if(line.hasOption("edebug")) {
+      debug = true;
       edebug = true;
+    }
 
     if(line.hasOption("host"))
       ip = line.getOptionValue("host");
@@ -501,9 +504,9 @@ class DiabloMiner {
         double basis = (double)elapsed / (double)(currentRuns - lastRuns);
         double targetBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
 
-        if(basis < targetBasis / 2 && Integer.MAX_VALUE / loops / vectors > workSize + (workSizeBase * 10))
+        if(basis < targetBasis / 2 && TWO32 / loops / vectors > workSize + (workSizeBase * 10))
           workSize += workSizeBase * 10;
-        else if(basis < targetBasis && Integer.MAX_VALUE / loops /vectors > workSize + workSizeBase)
+        else if(basis < targetBasis && TWO32 / loops / vectors > workSize + workSizeBase)
           workSize += workSizeBase;
         else if(basis > targetBasis * 2 && workSize > (workSizeBase * 10) + workSizeBase)
           workSize -= workSizeBase * 10;
@@ -679,7 +682,7 @@ class DiabloMiner {
                 .setArg(19, midstate2[5])
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
-                .setArg(22, (int) currentWork.base / loops / vectors)
+                .setArg(22, (int)(currentWork.base / loops / vectors))
                 .setArg(23, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
@@ -732,7 +735,7 @@ class DiabloMiner {
         void update(long delta) {
           if(longpoll && longpollIncoming.get() != null) {
             getWorkAsync();
-          } else if(base + delta > Integer.MAX_VALUE) {
+          } else if(base + delta > TWO32) {
             debug("Forcing getwork update due to nonce saturation");
             getWork();
           } else if(lastPulled + getworkRefresh < getNow()) {
