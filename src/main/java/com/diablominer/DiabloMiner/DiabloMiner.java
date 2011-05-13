@@ -76,6 +76,9 @@ class DiabloMiner {
   float targetFPS = 60;
   int forceWorkSize = 0;
   int vectors = 1;
+  boolean xvectors = false;
+  boolean yvectors = false;
+  boolean zvectors = false;
   boolean debug = false;
   boolean edebug = false;
   int getworkRefresh = 5000;
@@ -104,6 +107,9 @@ class DiabloMiner {
   final static int OUTPUTS = 256;
   final static long TWO32 = 4294967295L;
 
+  final static String UPPER[] = { "X", "Y", "Z", "W", "T" };
+  final static String LOWER[] = { "x", "y", "z", "w", "t" };
+
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
 
@@ -131,7 +137,7 @@ class DiabloMiner {
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("z", "loops", true, "kernel loops (PoT exp, 0 is off)");
-    options.addOption("v", "vectors", false, "force vectors in kernel");
+    options.addOption("v", "vectors", true, "vector size in kernel (1 - 6)");
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("h", "help", false, "this help");
@@ -191,8 +197,27 @@ class DiabloMiner {
     if(line.hasOption("loops"))
       zloops = (int) Math.pow(2, Integer.parseInt(line.getOptionValue("loops")));
 
-    if(line.hasOption("vectors"))
-      vectors = 2;
+    if(line.hasOption("vectors")) {
+      if(line.getOptionValue("vectors") != null)
+        vectors = Integer.parseInt(line.getOptionValue("vectors"));
+      else
+        vectors = 2;
+
+      if(vectors < 16 && (vectors < 1 || vectors > 6))
+        throw new ParseException("Do not use vectors less than 1 or more than 6");
+
+      if(vectors == 2 || vectors == 3 || vectors == 4 || vectors == 5 || vectors == 6)
+        xvectors = true;
+
+      if(vectors == 4 || vectors == 5 || vectors == 6)
+        yvectors = true;
+
+      if(vectors == 6)
+        zvectors = true;
+
+      if(vectors > 16)
+        vectors -= 16;
+    }
 
     if(line.hasOption("devices")){
       String devices[] = line.getOptionValue("devices").split(",");
@@ -250,6 +275,50 @@ class DiabloMiner {
     stream.read(data);
     source = new String(data).trim();
     stream.close();
+
+    String sourceLines[] = source.split("\n");
+    source = "";
+    long vectorOffset = (TWO32 / vectors);
+    long vectorBase = 0;
+    long actualVectors = vectors;
+
+    if(xvectors)
+      actualVectors--;
+
+    if(yvectors)
+      actualVectors--;
+
+    for(int x = 0; x < sourceLines.length; x++) {
+      String sourceLine = sourceLines[x];
+
+      if(sourceLine.contains("Z") || sourceLine.contains("z")) {
+        for(int y = 0; y < actualVectors; y++) {
+          String replace = sourceLine;
+
+          if((y == 0 && xvectors == true) ||
+             (y == 1 && yvectors == true) ||
+             (y == 2 && zvectors == true)) {
+            if(replace.contains("typedef"))
+              replace = replace.replace("uint", "uint2");
+            else if(replace.contains("id(0)")) {
+              replace = replace.replace(";", " + (uint2)(" + vectorBase + ", " + (vectorBase + vectorOffset) + ");");
+              vectorBase += vectorOffset + vectorOffset;
+            } else if(sourceLine.contains("if")) {
+              replace = replace.replace("ZH", "ZH.x").replaceAll("nonce", "nonce.x")
+                      + replace.replace("ZH", "ZH.y").replaceAll("nonce", "nonce.y");
+            }
+          } else {
+            if(replace.contains("id(0)")) {
+              replace = replace.replace(";", " + " + vectorBase + ";");
+              vectorBase += vectorOffset;
+            }
+          }
+
+          source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
+        }
+      } else
+        source += sourceLine + "\n";
+    }
 
     info("Started");
     info("Connecting to: " + url);
@@ -439,9 +508,6 @@ class DiabloMiner {
 
       if(hasBitAlign)
         compileOptions += " -D BITALIGN";
-
-      if(vectors > 1)
-        compileOptions += " -D VECTORS";
 
       if(loops > 1) {
         compileOptions += " -D DOLOOPS";
