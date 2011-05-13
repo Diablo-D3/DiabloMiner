@@ -583,7 +583,7 @@ class DiabloMiner {
           for(int z = 0; z < OUTPUTS; z++) {
             int nonce = buffer[bufferIndex].getInt(z * 4);
 
-            if(nonce > 0) {
+            if(nonce != 0) {
               for(int j = 0; j < 19; j++)
                 digestInput.putInt(j*4, currentWork.data[j]);
 
@@ -591,15 +591,17 @@ class DiabloMiner {
 
               digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
 
-              long G = ((long)((0x000000FF & ((int)digestOutput[27])) << 24 |
-                    (0x000000FF & ((int)digestOutput[26])) << 16 |
-                    (0x000000FF & ((int)digestOutput[25])) << 8 |
-                    (0x000000FF & ((int)digestOutput[24])))) & 0xFFFFFFFFL;
+              long G =
+                    ((long)(0xFF & digestOutput[27]) << 24) |
+                    ((long)(0xFF & digestOutput[26]) << 16) |
+                    ((long)(0xFF & digestOutput[25]) << 8) |
+                    ((long)(0xFF & digestOutput[24]));
 
-              long H = ((long)((0x000000FF & ((int)digestOutput[31])) << 24 |
-                    (0x000000FF & ((int)digestOutput[30])) << 16 |
-                    (0x000000FF & ((int)digestOutput[29])) << 8 |
-                    (0x000000FF & ((int)digestOutput[28])))) & 0xFFFFFFFFL;
+              long H =
+                    ((long)(0xFF & digestOutput[31]) << 24) |
+                    ((long)(0xFF & digestOutput[30]) << 16) |
+                    ((long)(0xFF & digestOutput[29]) << 8)  |
+                    ((long)(0xFF & digestOutput[28]));
 
               edebug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
 
