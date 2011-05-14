@@ -81,6 +81,7 @@ class DiabloMiner {
   boolean zvectors = false;
   boolean debug = false;
   boolean edebug = false;
+  boolean hwcheck = true;
   int getworkRefresh = 5000;
   int zloops = 0;
 
@@ -203,8 +204,8 @@ class DiabloMiner {
       else
         vectors = 2;
 
-      if(vectors < 16 && (vectors < 1 || vectors > 6))
-        throw new ParseException("Do not use vectors less than 1 or more than 6");
+      if(!((0 < vectors || vectors < 22) || (16 < vectors || vectors > 21)))
+        throw new ParseException("Only 1, 2, 3, 4, 5, 6, 17, 18, 19, 20, 21 are valid for vectors");
 
       if(vectors == 2 || vectors == 3 || vectors == 4 || vectors == 5 || vectors == 6)
         xvectors = true;
@@ -454,7 +455,7 @@ class DiabloMiner {
     final CLDevice device;
     final CLContext context;
 
-    final CLProgram program;
+    CLProgram program;
     final CLKernel kernel;
 
     long workSize;
@@ -515,6 +516,7 @@ class DiabloMiner {
       }
 
       program = CL10.clCreateProgramWithSource(context, source, null);
+
       err = CL10.clBuildProgram(program, device, compileOptions, null);
       if(err != CL10.CL_SUCCESS) {
         ByteBuffer logBuffer = BufferUtils.createByteBuffer(1024);
@@ -528,6 +530,78 @@ class DiabloMiner {
 
         error("Failed to build program on " + deviceName);
         System.exit(0);
+      }
+
+      if(hasBitAlign) {
+        info("BFI_INT patching enabled, disabling hardware checking");
+        hwcheck = false;
+
+        int binarySize = (int)program.getInfoSizeArray(CL10.CL_PROGRAM_BINARY_SIZES)[0];
+
+        ByteBuffer binary = BufferUtils.createByteBuffer(binarySize);
+        program.getInfoBinaries(binary);
+
+        for(int pos = 0; pos < binarySize - 4; pos++) {
+          if((long)(0xFFFFFFFF & binary.getInt(pos)) == 0x464C457FL &&
+             (long)(0xFFFFFFFF & binary.getInt(pos + 4)) == 0x64010101L) {
+            boolean firstText = true;
+
+            int offset = binary.getInt(pos + 32);
+            short entrySize = binary.getShort(pos + 46);
+            short entryCount = binary.getShort(pos + 48);
+            short index = binary.getShort(pos + 50);
+
+            int header = pos + offset;
+
+            int nameTableOffset = binary.getInt(header + index * entrySize + 16);
+            int size = binary.getInt(header + index * entrySize + 20);
+
+            int entry = header;
+
+            for(int section = 0; section < entryCount; section++) {
+              int nameIndex = binary.getInt(entry);
+              offset = binary.getInt(entry + 16);
+              size = binary.getInt(entry + 20);
+
+              int name = pos + nameTableOffset + nameIndex;
+
+              if((long)(0xFFFFFFFF & binary.getInt(name)) == 0x7865742E) {
+                if(firstText) {
+                  firstText = false;
+                } else {
+                  int sectionStart = pos + offset;
+                  for(int i = 0; i < size / 8; i++) {
+                    long instruction1 = (long)(0xFFFFFFFF & binary.getInt(sectionStart + i * 8));
+                    long instruction2 = (long)(0xFFFFFFFF & binary.getInt(sectionStart + i * 8 + 4));
+
+                    if((instruction1 & 0x02001000L) == 0x00000000L &&
+                       (instruction2 & 0x9003F000L) == 0x0001A000L) {
+                      instruction2 ^= (0x0001A000L ^ 0x0000C000L);
+
+                      binary.putInt(sectionStart + i * 8 + 4, (int)instruction2);
+                    }
+                  }
+                }
+              }
+
+              entry += entrySize;
+            }
+
+            break;
+          }
+        }
+
+        IntBuffer binaryErr = BufferUtils.createIntBuffer(1);
+
+        CL10.clReleaseProgram(program);
+        program = CL10.clCreateProgramWithBinary(context, device, binary, binaryErr, null);
+
+        err = CL10.clBuildProgram(program, device, compileOptions, null);
+
+        if(err != CL10.CL_SUCCESS) {
+          error("Failed to BFI_INT patch kernel on " + deviceName);
+          System.exit(0);
+        }
       }
 
       kernel = CL10.clCreateKernel(program, "search", null);
@@ -681,7 +755,8 @@ class DiabloMiner {
 
                   submittedBlock = true;
                 } else {
-                  error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
+                  if(hwcheck)
+                    error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
                 }
               }
 
