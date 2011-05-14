@@ -154,8 +154,10 @@ class DiabloMiner {
         throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
       }
 
-      if(!line.hasOption("url") && (!line.hasOption("user") || !line.hasOption("pass"))) {
-        throw new ParseException("Requires either --url or --user and --pass");
+      if(!line.hasOption("url") && !line.hasOption("user")) {
+        throw new ParseException("Requires either --url or --user");
+      } else if(line.hasOption("url") && line.hasOption("user")) {
+        throw new ParseException("Don't use --url and --user at the same time");
       }
     } catch (ParseException e) {
       System.out.println(e.getLocalizedMessage() + "\n");
@@ -269,7 +271,7 @@ class DiabloMiner {
     }
 
     bitcoind = new URL(url);
-    userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim();
+    userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim().replace("\r\n", "");
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
     byte[] data = new byte[64 * 1024];
