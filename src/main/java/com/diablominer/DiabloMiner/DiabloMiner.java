@@ -205,10 +205,7 @@ class DiabloMiner {
       zloops = (int) Math.pow(2, Integer.parseInt(line.getOptionValue("loops")));
 
     if(line.hasOption("vectors")) {
-      if(line.getOptionValue("vectors") != null)
-        vectors = Integer.parseInt(line.getOptionValue("vectors"));
-      else
-        vectors = 2;
+      vectors = Integer.parseInt(line.getOptionValue("vectors"));
 
       if(!((0 < vectors || vectors < 22) || (16 < vectors || vectors > 21)))
         throw new ParseException("Only 1, 2, 3, 4, 5, 6, 17, 18, 19, 20, 21 are valid for vectors");
@@ -293,6 +290,9 @@ class DiabloMiner {
       actualVectors--;
 
     if(yvectors)
+      actualVectors--;
+
+    if(zvectors)
       actualVectors--;
 
     for(int x = 0; x < sourceLines.length; x++) {
@@ -390,7 +390,7 @@ class DiabloMiner {
             basisAverage += deviceState.basis;
           }
 
-          basisAverage = 1000 / (basisAverage / deviceStates.size() * 3.0);
+          basisAverage = 1000 / (basisAverage / deviceStates.size() * EXECUTION_TOTAL);
 
           System.out.printf("| fps: %.1f", basisAverage);
         } else {
@@ -647,7 +647,7 @@ class DiabloMiner {
 
       info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
 
-      workSizeBase = localWorkSize.get(0) * deviceCU;
+      workSizeBase = localWorkSize.get(0) * localWorkSize.get(0);
 
       workSize = workSizeBase * 32;
 
@@ -857,7 +857,6 @@ class DiabloMiner {
                 .setArg(23, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
-          CL10.clEnqueueReadBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
 
           if(err !=  CL10.CL_SUCCESS) {
             if(err != CL10.CL_INVALID_KERNEL_ARGS) {
@@ -871,6 +870,7 @@ class DiabloMiner {
             deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
             currentWork.base += workSizeTemp.get(0) * loops * vectors;
             runs.incrementAndGet();
+            CL10.clEnqueueReadBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
           }
         }
       }
