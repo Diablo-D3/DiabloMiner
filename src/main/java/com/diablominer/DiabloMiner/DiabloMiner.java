@@ -70,27 +70,36 @@ import org.lwjgl.opencl.CLPlatform;
 import org.lwjgl.opencl.CLProgram;
 
 class DiabloMiner {
+  final static int EXECUTION_TOTAL = 3;
+  final static long TIME_OFFSET = 7500;
+  final static int OUTPUTS = 256;
+  final static long TWO32 = 4294967295L;
+
   URL bitcoind;
   URL bitcoindLongpoll;
+  Proxy proxy = null;
   String userPass;
-  float targetFPS = 60;
+  int getworkRefresh = 5000;
+
+  boolean hwcheck = true;
+  boolean debug = false;
+  boolean edebug = false;
+
+  double targetFPS = 60.0;
+  double targetFPSBasis;
+  long maxWorkSize;
+
   int forceWorkSize = 0;
+  int zloops = 1;
   int vectors = 1;
   boolean xvectors = false;
   boolean yvectors = false;
   boolean zvectors = false;
-  boolean debug = false;
-  boolean edebug = false;
-  boolean hwcheck = true;
-  int getworkRefresh = 5000;
-  int zloops = 0;
 
   String source;
 
   boolean running = true;
   Thread mainThread;
-
-  Proxy proxy = null;
 
   List<DeviceState> deviceStates = new ArrayList<DeviceState>();
 
@@ -102,11 +111,6 @@ class DiabloMiner {
   AtomicLong currentAttempts = new AtomicLong(0);
   AtomicLong currentRejects = new AtomicLong(0);
   Set<String> enabledDevices = null;
-
-  final static int EXECUTION_TOTAL = 3;
-  final static long TIME_OFFSET = 7500;
-  final static int OUTPUTS = 256;
-  final static long TWO32 = 4294967295L;
 
   final static String UPPER[] = { "X", "Y", "Z", "W", "T" };
   final static String LOWER[] = { "x", "y", "z", "w", "t" };
@@ -323,6 +327,9 @@ class DiabloMiner {
         source += sourceLine + "\n";
     }
 
+    targetFPSBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
+    maxWorkSize = TWO32 / zloops / vectors;
+
     info("Started");
     info("Connecting to: " + url);
 
@@ -372,8 +379,18 @@ class DiabloMiner {
         if(debug) {
           System.out.print("\r" + averageHashCount + "/" + hashLongCount + " khash/sec | ghash: ");
 
-          for(int i = 0; i < deviceStates.size(); i++)
-            System.out.printf("%.3f ", deviceStates.get(i).deviceHashCount.get() / 1000.0 / 1000.0 / 1000.0);
+          double basisAverage = 0.0;
+
+          for(int i = 0; i < deviceStates.size(); i++) {
+            DeviceState deviceState = deviceStates.get(i);
+
+            System.out.printf("%.1f ", deviceState.deviceHashCount.get() / 1000.0 / 1000.0 / 1000.0);
+            basisAverage += deviceState.basis;
+          }
+
+          basisAverage = 1000 / (basisAverage / deviceStates.size() * 3.0);
+
+          System.out.printf(" | fps: %.1f", basisAverage);
         } else {
           System.out.print("\r" + averageHashCount + "/" + hashLongCount + " khash/sec");
         }
@@ -462,6 +479,7 @@ class DiabloMiner {
 
     long workSize;
     long workSizeBase;
+    double basis;
 
     final PointerBuffer localWorkSize = BufferUtils.createPointerBuffer(1);
 
@@ -504,7 +522,7 @@ class DiabloMiner {
 
       if(zloops > 1)
         loops = zloops;
-      else if(zloops == 1)
+      else if(zloops <= 1)
         loops = 1;
 
       String compileOptions = "";
@@ -642,18 +660,24 @@ class DiabloMiner {
       long elapsed = now - lastTime;
       long currentRuns = runs.get();
 
-      if(now > startTime + TIME_OFFSET && currentRuns > lastRuns + targetFPS) {
-        double basis = (double)elapsed / (double)(currentRuns - lastRuns);
-        double targetBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
+      if(now > startTime + TIME_OFFSET * 2 && currentRuns > lastRuns + targetFPS) {
+        basis = (double)elapsed / (double)(currentRuns - lastRuns);
 
-        if(basis < targetBasis / 2 && TWO32 / loops / vectors > workSize + (workSizeBase * 10))
-          workSize += workSizeBase * 10;
-        else if(basis < targetBasis && TWO32 / loops / vectors > workSize + workSizeBase)
+        if(basis < targetFPSBasis / 3)
+          workSize += workSizeBase * 30;
+        else if(basis < targetFPSBasis / 1.5)
+          workSize += workSizeBase * 15;
+        else if(basis < targetFPSBasis)
           workSize += workSizeBase;
-        else if(basis > targetBasis * 2 && workSize > (workSizeBase * 10) + workSizeBase)
-          workSize -= workSizeBase * 10;
-        else if(basis > targetBasis && workSize > workSizeBase)
+        else if(basis > targetFPSBasis * 1.5)
+          workSize -= workSizeBase * 15;
+        else if(basis > targetFPSBasis)
           workSize -= workSizeBase;
+
+        if(workSize < workSizeBase)
+          workSize = workSizeBase;
+        else if(workSize > maxWorkSize)
+          workSize = maxWorkSize;
 
         lastRuns = currentRuns;
         lastTime = now;
