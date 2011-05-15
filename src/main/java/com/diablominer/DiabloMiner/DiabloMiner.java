@@ -390,7 +390,7 @@ class DiabloMiner {
 
           basisAverage = 1000 / (basisAverage / deviceStates.size() * 3.0);
 
-          System.out.printf(" | fps: %.1f", basisAverage);
+          System.out.printf("| fps: %.1f", basisAverage);
         } else {
           System.out.print("\r" + averageHashCount + "/" + hashLongCount + " khash/sec");
         }
