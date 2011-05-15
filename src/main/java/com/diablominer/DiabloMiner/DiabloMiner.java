@@ -361,6 +361,8 @@ class DiabloMiner {
       platformCount++;
     }
 
+    CL10.clUnloadCompiler();
+
     long previousHashCount = 0;
     long previousAdjustedHashCount = 0;
     long previousAdjustedStartTime = startTime = (getNow()) - 1;
