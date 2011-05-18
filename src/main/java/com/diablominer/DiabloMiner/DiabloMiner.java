@@ -156,7 +156,7 @@ class DiabloMiner {
       line = parser.parse(options, args);
 
       if(line.hasOption("help")) {
-        throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
+        throw new ParseException("A wise man once said, '? ? ? ? ? ? ? ? B A'");
       }
 
       if(!line.hasOption("url") && !line.hasOption("user")) {
@@ -369,7 +369,8 @@ class DiabloMiner {
     long previousAdjustedStartTime = startTime = (getNow()) - 1;
 
     while(running) {
-      for(int i = 0; i < deviceStates.size(); i++)
+      final int statesize = deviceStates.size();
+      for(int i = 0; i < statesize; i++)
         deviceStates.get(i).checkDevice();
 
       long now = getNow();
@@ -896,9 +897,12 @@ class DiabloMiner {
         }
 
         void forceUpdate() {
-          for(int i = 0; i < deviceStates.size(); i++) {
+          ExecutionState[] execs;
+          final int devicesize = deviceStates.size();
+          for(int i = 0; i < devicesize; i++) {
+            execs = deviceStates.get(i).executions;
             for(int j = 0; j < EXECUTION_TOTAL; j++)
-              deviceStates.get(i).executions[j].currentWork.lastPulled = 0;
+              execs[j].currentWork.lastPulled = 0;
           }
         }
 
@@ -1110,18 +1114,23 @@ class DiabloMiner {
           String midstates = responseMessage.get("midstate").getValueAsText();
           String targets = responseMessage.get("target").getValueAsText();
 
-          for(int i = 0; i < data.length; i++) {
-            String parse = datas.substring(i*8, (i*8)+8);
+          String parse;
+
+          int length = data.length;
+          for(int i = 0; i < length; i++) {
+            parse = datas.substring(i*8, (i*8)+8);
             data[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
           }
 
-          for(int i = 0; i < midstate.length; i++) {
-            String parse = midstates.substring(i*8, (i*8)+8);
+          length = midstate.length;
+          for(int i = 0; i < length; i++) {
+            parse = midstates.substring(i*8, (i*8)+8);
             midstate[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
           }
 
-          for(int i = 0; i < target.length; i++) {
-            String parse = targets.substring(i*8, (i*8)+8);
+          length = target.length;
+          for(int i = 0; i < length; i++) {
+            parse = targets.substring(i*8, (i*8)+8);
             target[i] = (Long.reverseBytes(Long.parseLong(parse, 16) << 16)) >>> 16;
           }
         }
