@@ -55,6 +55,7 @@ import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
+import org.codehaus.jackson.node.NullNode;
 import org.codehaus.jackson.node.ObjectNode;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.PointerBuffer;
@@ -411,9 +412,7 @@ class DiabloMiner {
           Thread.sleep(1000);
         else
           Thread.sleep(1);
-      } catch (InterruptedException e) {
-        // do nothing
-      }
+      } catch (InterruptedException e) { }
     }
   }
 
@@ -976,27 +975,25 @@ class DiabloMiner {
           InputStream responseStream = null;
 
           try {
-            if(longpoll == false) {
-              String xlongpolling = connection.getHeaderField("X-Long-Polling");
+            String xlongpolling = connection.getHeaderField("X-Long-Polling");
 
-              if(xlongpolling != null) {
-                if(xlongpolling.startsWith("http"))
-                  bitcoindLongpoll = new URL(xlongpolling);
-                else if(xlongpolling.startsWith("/"))
-                  bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
-                        xlongpolling);
-                else
-                  bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
-                        (bitcoind.getFile() + "/" + xlongpolling).replace("//", "/"));
+            if(xlongpolling != null) {
+              if(xlongpolling.startsWith("http"))
+                bitcoindLongpoll = new URL(xlongpolling);
+              else if(xlongpolling.startsWith("/"))
+                bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
+                      xlongpolling);
+              else
+                bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
+                      (bitcoind.getFile() + "/" + xlongpolling).replace("//", "/"));
 
-                getworkRefresh = 60000;
-                longpoll = true;
+              getworkRefresh = 120000;
+              longpoll = true;
 
-                debug("Enabling long poll support");
+              debug("Enabling long poll support");
 
-                new Thread(new getWorkAsync(), "DiabloMiner Long Poll for " +
-                      Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
-              }
+              new Thread(new getWorkAsync(), "DiabloMiner Long Poll for " +
+                    Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
             }
 
             if(connection.getContentEncoding() != null) {
@@ -1011,7 +1008,13 @@ class DiabloMiner {
             if(responseStream == null)
               throw new IOException("Drop to error handler");
 
-            responseMessage = (ObjectNode) mapper.readTree(responseStream);
+            Object output = mapper.readTree(responseStream);
+
+            if(NullNode.class.equals(output.getClass()))
+              throw new IOException("Bitcoin returned unparsable JSON") ;
+            else
+              responseMessage = (ObjectNode) output;
+
             responseStream.close();
           } catch (JsonProcessingException e) {
             throw new IOException("Bitcoin returned unparsable JSON");
@@ -1042,7 +1045,12 @@ class DiabloMiner {
 
             if(error.startsWith("{")) {
               try {
-                responseMessage = (ObjectNode) mapper.readTree(error);
+                Object output = mapper.readTree(error);
+
+                if(NullNode.class.equals(output.getClass()))
+                  throw new IOException("Bitcoin returned error: " + error);
+                else
+                  responseMessage = (ObjectNode) output;
 
                 if(responseMessage.get("error") != null) {
                   if(responseMessage.get("error").get("message") != null &&
