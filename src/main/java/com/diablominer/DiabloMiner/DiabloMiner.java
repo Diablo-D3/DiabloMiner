@@ -987,13 +987,15 @@ class DiabloMiner {
                 bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
                       (bitcoind.getFile() + "/" + xlongpolling).replace("//", "/"));
 
-              getworkRefresh = 120000;
-              longpoll = true;
+              if(longpoll == false) {
+                getworkRefresh = 120000;
+                longpoll = true;
 
-              debug("Enabling long poll support");
+                debug("Enabling long poll support");
 
-              new Thread(new getWorkAsync(), "DiabloMiner Long Poll for " +
-                    Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
+                new Thread(new getWorkAsync(), "DiabloMiner Long Poll for " +
+                      Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
+              }
             }
 
             if(connection.getContentEncoding() != null) {
