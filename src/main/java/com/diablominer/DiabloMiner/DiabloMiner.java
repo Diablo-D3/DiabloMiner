@@ -103,6 +103,7 @@ class DiabloMiner {
   Thread mainThread;
 
   List<DeviceState> deviceStates = new ArrayList<DeviceState>();
+  int deviceStatesCount;
 
   long startTime;
 
@@ -156,7 +157,7 @@ class DiabloMiner {
       line = parser.parse(options, args);
 
       if(line.hasOption("help")) {
-        throw new ParseException("A wise man once said, '? ? ? ? ? ? ? ? B A'");
+        throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
       }
 
       if(!line.hasOption("url") && !line.hasOption("user")) {
@@ -364,13 +365,14 @@ class DiabloMiner {
 
     CL10.clUnloadCompiler();
 
+    deviceStatesCount = deviceStates.size();
+
     long previousHashCount = 0;
     long previousAdjustedHashCount = 0;
     long previousAdjustedStartTime = startTime = (getNow()) - 1;
 
     while(running) {
-      final int statesize = deviceStates.size();
-      for(int i = 0; i < statesize; i++)
+      for(int i = 0; i < deviceStatesCount; i++)
         deviceStates.get(i).checkDevice();
 
       long now = getNow();
@@ -897,12 +899,12 @@ class DiabloMiner {
         }
 
         void forceUpdate() {
-          ExecutionState[] execs;
-          final int devicesize = deviceStates.size();
-          for(int i = 0; i < devicesize; i++) {
-            execs = deviceStates.get(i).executions;
+          ExecutionState[] executions;
+
+          for(int i = 0; i < deviceStatesCount; i++) {
+            executions = deviceStates.get(i).executions;
             for(int j = 0; j < EXECUTION_TOTAL; j++)
-              execs[j].currentWork.lastPulled = 0;
+              executions[j].currentWork.lastPulled = 0;
           }
         }
 
@@ -1116,20 +1118,17 @@ class DiabloMiner {
 
           String parse;
 
-          int length = data.length;
-          for(int i = 0; i < length; i++) {
+          for(int i = 0; i < 32; i++) {
             parse = datas.substring(i*8, (i*8)+8);
             data[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
           }
 
-          length = midstate.length;
-          for(int i = 0; i < length; i++) {
+          for(int i = 0; i < 8; i++) {
             parse = midstates.substring(i*8, (i*8)+8);
             midstate[i] = Integer.reverseBytes((int)Long.parseLong(parse, 16));
           }
 
-          length = target.length;
-          for(int i = 0; i < length; i++) {
+          for(int i = 0; i < 8; i++) {
             parse = targets.substring(i*8, (i*8)+8);
             target[i] = (Long.reverseBytes(Long.parseLong(parse, 16) << 16)) >>> 16;
           }
@@ -1138,8 +1137,8 @@ class DiabloMiner {
         String encodeBlock() {
           StringBuilder builder = new StringBuilder();
 
-          for(int d : data)
-            builder.append(String.format("%08x", Integer.reverseBytes(d)));
+          for(int i = 0; i < 32; i++)
+            builder.append(String.format("%08x", Integer.reverseBytes(data[i])));
 
           return builder.toString();
         }
@@ -1155,7 +1154,9 @@ class DiabloMiner {
               }
 
               while(longpollIncoming.get() != null)
-                Thread.yield();
+                try {
+                  Thread.sleep(5000);
+                } catch (InterruptedException e) {}
             }
           }
         }
