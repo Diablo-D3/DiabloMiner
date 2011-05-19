@@ -156,7 +156,7 @@ class DiabloMiner {
       line = parser.parse(options, args);
 
       if(line.hasOption("help")) {
-        throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
+        throw new ParseException("A wise man once said, '? ? ? ? ? ? ? ? B A'");
       }
 
       if(!line.hasOption("url") && !line.hasOption("user")) {
