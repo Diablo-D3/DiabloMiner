@@ -93,6 +93,7 @@ class DiabloMiner {
   int forceWorkSize = 0;
   int zloops = 1;
   int vectors = 1;
+  int vectorWidth;
   boolean xvectors = false;
   boolean yvectors = false;
   boolean zvectors = false;
@@ -114,8 +115,8 @@ class DiabloMiner {
   AtomicLong currentRejects = new AtomicLong(0);
   Set<String> enabledDevices = null;
 
-  final static String UPPER[] = { "X", "Y", "Z", "W", "T" };
-  final static String LOWER[] = { "x", "y", "z", "w", "t" };
+  final static String UPPER[] = { "X", "Y", "Z", "W", "T", "A", "B", "C" };
+  final static String LOWER[] = { "x", "y", "z", "w", "t", "a", "b", "c" };
 
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
@@ -147,6 +148,7 @@ class DiabloMiner {
     options.addOption("v", "vectors", true, "vector size in kernel (1 - 6)");
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
+    options.addOption("ds", "ksource", false, "output kernel source and quit");
     options.addOption("h", "help", false, "this help");
 
     PosixParser parser = new PosixParser();
@@ -209,20 +211,32 @@ class DiabloMiner {
     if(line.hasOption("vectors")) {
       vectors = Integer.parseInt(line.getOptionValue("vectors"));
 
-      if(!((0 < vectors || vectors < 22) || (16 < vectors || vectors > 21)))
-        throw new ParseException("Only 1, 2, 3, 4, 5, 6, 17, 18, 19, 20, 21 are valid for vectors");
+      if(!((vectors >= 1 && vectors <= 6) ||
+           (vectors >= 17 && vectors <= 24) ||
+           (vectors >= 33 && vectors <= 44)))
+        throw new ParseException("Only 1 through 6, 17 through 24, 33 through 44 are valid for vectors");
 
-      if(vectors == 2 || vectors == 3 || vectors == 4 || vectors == 5 || vectors == 6)
+      if(vectors == 2  || vectors == 3  || vectors == 4  || vectors == 5  || vectors == 6 ||
+         vectors >= 36)
         xvectors = true;
 
-      if(vectors == 4 || vectors == 5 || vectors == 6)
+      if(vectors == 4  || vectors == 5  || vectors == 6 ||
+         vectors >= 40)
         yvectors = true;
 
-      if(vectors == 6)
+      if(vectors == 6 ||
+         vectors >= 44)
         zvectors = true;
 
-      if(vectors > 16)
+      if(vectors > 32) {
+        vectors -= 32;
+        vectorWidth = 4;
+      } else if(vectors > 16) {
         vectors -= 16;
+        vectorWidth = 1;
+      } else {
+        vectorWidth = 2;
+      }
     }
 
     if(line.hasOption("devices")){
@@ -289,13 +303,13 @@ class DiabloMiner {
     long actualVectors = vectors;
 
     if(xvectors)
-      actualVectors--;
+      actualVectors -= vectorWidth - 1;
 
     if(yvectors)
-      actualVectors--;
+      actualVectors -= vectorWidth - 1;
 
     if(zvectors)
-      actualVectors--;
+      actualVectors -= vectorWidth - 1;
 
     for(int x = 0; x < sourceLines.length; x++) {
       String sourceLine = sourceLines[x];
@@ -307,17 +321,32 @@ class DiabloMiner {
           if((y == 0 && xvectors == true) ||
              (y == 1 && yvectors == true) ||
              (y == 2 && zvectors == true)) {
-            if(replace.contains("typedef"))
-              replace = replace.replace("uint", "uint2");
-            else if(replace.contains("id(0)")) {
-              replace = replace.replace(";", " + (uint2)(" + vectorBase + ", " + (vectorBase + vectorOffset) + ");");
-              vectorBase += vectorOffset + vectorOffset;
+            if(replace.contains("typedef")) {
+              if(vectorWidth == 2)
+                replace = replace.replace("uint", "uint2");
+              else if(vectorWidth == 4)
+                replace = replace.replace("uint", "uint4");
+            } else if(replace.contains("global")) {
+              if(vectorWidth == 2) {
+                replace = replace.replace(";", " + (uint2)(" + vectorBase + ", " + (vectorBase + vectorOffset) + ");");
+                vectorBase += vectorOffset * 2;
+              } else if(vectorWidth == 4) {
+                replace = replace.replace(";", " + (uint4)(" + vectorBase + ", " + (vectorBase + vectorOffset) +  ", " + (vectorBase + vectorOffset * 2) +  ", " + (vectorBase + vectorOffset * 3) + ");");
+                vectorBase += vectorOffset * 4;
+              }
             } else if(sourceLine.contains("if")) {
-              replace = replace.replace("ZH", "ZH.x").replaceAll("nonce", "nonce.x")
-                      + replace.replace("ZH", "ZH.y").replaceAll("nonce", "nonce.y");
+              if(vectorWidth ==  2) {
+                replace = replace.replace("ZH", "ZH.x").replaceAll("nonce", "nonce.x")
+                        + replace.replace("ZH", "ZH.y").replaceAll("nonce", "nonce.y");
+              } else if(vectorWidth == 4) {
+                replace = replace.replace("ZH", "ZH.s0").replaceAll("nonce", "nonce.s0")
+                        + replace.replace("ZH", "ZH.s1").replaceAll("nonce", "nonce.s1")
+                        + replace.replace("ZH", "ZH.s2").replaceAll("nonce", "nonce.s2")
+                        + replace.replace("ZH", "ZH.s3").replaceAll("nonce", "nonce.s3");
+              }
             }
           } else {
-            if(replace.contains("id(0)")) {
+            if(replace.contains("global")) {
               replace = replace.replace(";", " + " + vectorBase + ";");
               vectorBase += vectorOffset;
             }
@@ -327,6 +356,11 @@ class DiabloMiner {
         }
       } else
         source += sourceLine + "\n";
+    }
+
+    if(line.hasOption("ds")) {
+      System.out.println("\n---\n" + source);
+      System.exit(0);
     }
 
     targetFPSBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
