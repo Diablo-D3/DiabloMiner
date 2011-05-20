@@ -40,16 +40,14 @@ __kernel void search(
   z ZA, ZB, ZC, ZD, ZE, ZF, ZG, ZH;
   z ZW0, ZW1, ZW2, ZW3, ZW4, ZW5, ZW6, ZW7, ZW8, ZW9, ZW10, ZW11, ZW12, ZW13, ZW14, ZW15;
   z Znonce = base + get_global_id(0);
-  
-  #ifdef DOLOOPS
-  Znonce *= (z)LOOPS;
-  #endif
 
   #ifdef DOLOOPS
+  Znonce *= (z)LOOPS;
+
   uint it;
   const z Zloopnonce = Znonce;
-  for(it = 0; it != LOOPS; it++) {
-    Znonce = it ^ Zloopnonce;
+  for(it = LOOPS + 1; --it != 0;) {
+    Znonce = (LOOPS - it - 2) ^ Zloopnonce;
   #endif
     
     ZW3 = Znonce + fW3;

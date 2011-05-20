@@ -931,13 +931,11 @@ class DiabloMiner {
         }
 
         void getWorkAsync() {
-          JsonNode json = longpollIncoming.get();
+          JsonNode json = longpollIncoming.getAndSet(null);
 
           parse(json);
           lastPulled = getNow();
           base = 0;
-
-          longpollIncoming.set(null);
         }
 
         boolean sendWork(int nonce) {
