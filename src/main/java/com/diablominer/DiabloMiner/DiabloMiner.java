@@ -921,7 +921,7 @@ class DiabloMiner {
 
         void getWork() {
           try {
-            parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage));
+            parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage, false));
           } catch(IOException e) {
             error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
           }
@@ -948,20 +948,23 @@ class DiabloMiner {
           sendworkMessage.put("id", 1);
 
           try {
-            return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage).getBooleanValue();
+            return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage, false).getBooleanValue();
           } catch(IOException e) {
             error("Connection failed: " + e.getLocalizedMessage());
             return false;
           }
         }
 
-        JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage) throws IOException {
+        JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage, boolean longPoll) throws IOException {
         	HttpURLConnection connection;
 
           if(proxy == null)
             connection = (HttpURLConnection) bitcoind.openConnection();
           else
             connection = (HttpURLConnection) bitcoind.openConnection(proxy);
+
+          if(!longPoll)
+            connection.setConnectTimeout(5000);
 
           connection.setRequestProperty("Authorization", userPassword);
           connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
@@ -1145,7 +1148,7 @@ class DiabloMiner {
           public void run() {
             while(running) {
               try {
-                longpollIncoming.set(doJSONRPC(bitcoindLongpoll, userPass, mapper, getworkMessage));
+                longpollIncoming.set(doJSONRPC(bitcoindLongpoll, userPass, mapper, getworkMessage, true));
                 debug("Long poll getwork returned");
               } catch(IOException e) {
                 error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
