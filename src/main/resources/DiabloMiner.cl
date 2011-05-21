@@ -46,8 +46,8 @@ __kernel void search(
 
   uint it;
   const z Zloopnonce = Znonce;
-  for(it = LOOPS + 1; --it != 0;) {
-    Znonce = (LOOPS - it - 2) ^ Zloopnonce;
+  for(it = LOOPS; it != 0; i--) {
+    Znonce = (LOOPS - it) ^ Zloopnonce;
   #endif
     
     ZW3 = Znonce + fW3;
