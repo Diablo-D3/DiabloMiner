@@ -37,6 +37,7 @@ import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Formatter;
 import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
@@ -404,6 +405,8 @@ class DiabloMiner {
     long previousHashCount = 0;
     long previousAdjustedHashCount = 0;
     long previousAdjustedStartTime = startTime = (getNow()) - 1;
+    StringBuilder hashMeter = new StringBuilder(80);
+    Formatter hashMeterFormatter = new Formatter(hashMeter);
 
     while(running) {
       for(int i = 0; i < deviceStatesCount; i++)
@@ -416,24 +419,29 @@ class DiabloMiner {
 
       if(now - startTime > TIME_OFFSET * 2) {
         long averageHashCount = (adjustedHashCount + previousAdjustedHashCount) / 2;
-        if(debug) {
-          System.out.print("\r" + averageHashCount + "/" + hashLongCount + " khash/sec | ghash: ");
+
+        hashMeter.setLength(0);
+
+        if(!debug) {
+          hashMeterFormatter.format("\r%d/%d khash/sec", averageHashCount, hashLongCount);
+        } else {
+          hashMeterFormatter.format("\r%d/%d khash/sec | ghash: ", averageHashCount, hashLongCount);
 
           double basisAverage = 0.0;
 
           for(int i = 0; i < deviceStates.size(); i++) {
             DeviceState deviceState = deviceStates.get(i);
 
-            System.out.printf("%.1f ", deviceState.deviceHashCount.get() / 1000.0 / 1000.0 / 1000.0);
+            hashMeterFormatter.format("%.1f ", deviceState.deviceHashCount.get() / 1000.0 / 1000.0 / 1000.0);
             basisAverage += deviceState.basis;
           }
 
           basisAverage = 1000 / (basisAverage / deviceStates.size() * EXECUTION_TOTAL);
 
-          System.out.printf("| fps: %.1f", basisAverage);
-        } else {
-          System.out.print("\r" + averageHashCount + "/" + hashLongCount + " khash/sec");
+          hashMeterFormatter.format("| fps: %.1f", basisAverage);
         }
+
+        System.out.print(hashMeter);
       } else {
         System.out.print("\rWaiting...");
       }
@@ -916,6 +924,9 @@ class DiabloMiner {
         final int[] midstate = new int[8];
         final long[] target = new long[8];
 
+        StringBuilder dataOutput = new StringBuilder(8*32 + 1);
+        Formatter dataFormatter = new Formatter(dataOutput);
+
         final ObjectMapper mapper = new ObjectMapper();
         final ObjectNode getworkMessage = mapper.createObjectNode();
 
@@ -1170,12 +1181,29 @@ class DiabloMiner {
         }
 
         String encodeBlock() {
-          StringBuilder builder = new StringBuilder();
+          dataOutput.setLength(0);
 
-          for(int i = 0; i < 32; i++)
-            builder.append(String.format("%08x", Integer.reverseBytes(data[i])));
+          dataFormatter.format(
+                "%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x" +
+                "%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x",
+                Integer.reverseBytes(data[0]), Integer.reverseBytes(data[1]),
+                Integer.reverseBytes(data[2]), Integer.reverseBytes(data[3]),
+                Integer.reverseBytes(data[4]), Integer.reverseBytes(data[5]),
+                Integer.reverseBytes(data[6]), Integer.reverseBytes(data[7]),
+                Integer.reverseBytes(data[8]), Integer.reverseBytes(data[9]),
+                Integer.reverseBytes(data[10]), Integer.reverseBytes(data[11]),
+                Integer.reverseBytes(data[12]), Integer.reverseBytes(data[13]),
+                Integer.reverseBytes(data[14]), Integer.reverseBytes(data[15]),
+                Integer.reverseBytes(data[16]), Integer.reverseBytes(data[17]),
+                Integer.reverseBytes(data[18]), Integer.reverseBytes(data[19]),
+                Integer.reverseBytes(data[20]), Integer.reverseBytes(data[21]),
+                Integer.reverseBytes(data[22]), Integer.reverseBytes(data[23]),
+                Integer.reverseBytes(data[24]), Integer.reverseBytes(data[25]),
+                Integer.reverseBytes(data[26]), Integer.reverseBytes(data[27]),
+                Integer.reverseBytes(data[28]), Integer.reverseBytes(data[29]),
+                Integer.reverseBytes(data[30]), Integer.reverseBytes(data[31]));
 
-          return builder.toString();
+          return dataOutput.toString();
         }
 
         class getWorkAsync implements Runnable {
