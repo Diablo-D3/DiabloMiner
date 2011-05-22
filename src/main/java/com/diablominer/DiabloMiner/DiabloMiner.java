@@ -87,7 +87,7 @@ class DiabloMiner {
   boolean debug = false;
   boolean edebug = false;
 
-  double targetFPS = 60.0;
+  double targetFPS = 30.0;
   double targetFPSBasis;
   long maxWorkSize;
 
@@ -146,7 +146,7 @@ class DiabloMiner {
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("z", "loops", true, "kernel loops (PoT exp, 0 is off)");
-    options.addOption("v", "vectors", true, "vector size in kernel (1 - 6)");
+    options.addOption("v", "vectors", true, "vector size in kernel");
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("ds", "ksource", false, "output kernel source and quit");
