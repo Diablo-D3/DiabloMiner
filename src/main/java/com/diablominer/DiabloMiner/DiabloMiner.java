@@ -829,6 +829,8 @@ class DiabloMiner {
                 } else {
                   if(hwcheck)
                     error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
+                  else
+                    edebug("Invalid block found on " + deviceName + ", possible driver or hardware issue");
                 }
               }
 
@@ -875,14 +877,17 @@ class DiabloMiner {
           int fcty_e2 = (rot(midstate2[5], 2) ^ rot(midstate2[5], 13) ^ rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) |
                         (midstate2[7] & (midstate2[5] | midstate2[6])));
 
+          int fcty_e_plus_e2 = fcty_e + fcty_e2;
+          int fcty_e_plus_state0 = fcty_e + currentWork.midstate[0];
+
           kernel.setArg(0, fW0)
                 .setArg(1, fW1)
                 .setArg(2, fW2)
                 .setArg(3, fW3)
                 .setArg(4, fW15)
                 .setArg(5, fW01r)
-                .setArg(6, fcty_e)
-                .setArg(7, fcty_e2)
+                .setArg(6, fcty_e_plus_e2)
+                .setArg(7, fcty_e_plus_state0)
                 .setArg(8, currentWork.midstate[0])
                 .setArg(9, currentWork.midstate[1])
                 .setArg(10, currentWork.midstate[2])
@@ -893,7 +898,7 @@ class DiabloMiner {
                 .setArg(15, currentWork.midstate[7])
                 .setArg(16, midstate2[1])
                 .setArg(17, midstate2[2])
-                .setArg(18, midstate2[3])
+                .setArg(18, midstate2[3] + 0xB956c25b)
                 .setArg(19, midstate2[5])
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
