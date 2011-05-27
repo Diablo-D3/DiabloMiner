@@ -45,7 +45,7 @@ __constant uint K[64] = {
 __kernel void search(
     const uint fW0, const uint fW1, const uint fW2,
     const uint fW3, const uint fW15, const uint fW01r,
-    const uint fcty_e, const uint fcty_e2,
+    const uint fcty_e_plus_e2, const uint fcty_e_plus_state0,
     const uint state0, const uint state1, const uint state2, const uint state3,
     const uint state4, const uint state5, const uint state6, const uint state7,
     const uint b1, const uint c1, const uint d1,
@@ -68,9 +68,8 @@ __kernel void search(
     
     ZW3 = Znonce + fW3;
   
-    ZE = fcty_e + Znonce;
-    ZA = state0 + ZE;
-    ZE = ZE + fcty_e2;
+    ZE = Znonce + fcty_e_plus_e2 ;
+    ZA = Znonce + fcty_e_plus_state0;
     ZD = d1 + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, b1, c1) + K[ 4] + 0x80000000;
     ZH = h1 + ZD;
     ZD = ZD + (Zrotr(ZE, 2) ^ Zrotr(ZE, 13) ^ Zrotr(ZE, 22)) + Ma2(g1, ZE, f1);
