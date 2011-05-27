@@ -70,7 +70,7 @@ __kernel void search(
   
     ZE = Znonce + fcty_e_plus_e2 ;
     ZA = Znonce + fcty_e_plus_state0;
-    ZD = d1 + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, b1, c1) + K[ 4] + 0x80000000;
+    ZD = d1 + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, b1, c1);
     ZH = h1 + ZD;
     ZD = ZD + (Zrotr(ZE, 2) ^ Zrotr(ZE, 13) ^ Zrotr(ZE, 22)) + Ma2(g1, ZE, f1);
     ZC = c1 + (Zrotr(ZH, 6) ^ Zrotr(ZH, 11) ^ Zrotr(ZH, 25)) + Ch(ZH, ZA, b1) + K[ 5];
@@ -119,7 +119,7 @@ __kernel void search(
     ZE = ZE + (Zrotr(ZB, 6) ^ Zrotr(ZB, 11) ^ Zrotr(ZB, 25)) + Ch(ZB, ZC, ZD) + K[19] + ZW3;
     ZA = ZA + ZE;
     ZE = ZE + (Zrotr(ZF, 2) ^ Zrotr(ZF, 13) ^ Zrotr(ZF, 22)) + Ma(ZH, ZF, ZG);
-    ZW4 = (Zrotr(ZW2, 17) ^ Zrotr(ZW2, 19) ^ (ZW2 >> 10U)) + 0x80000000;
+    ZW4 = (Zrotr(ZW2, 17) ^ Zrotr(ZW2, 19) ^ (ZW2 >> 10U)) + 0x80000000U;
     ZD = ZD + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, ZB, ZC) + K[20] + ZW4;
     ZH = ZH + ZD;
     ZD = ZD + (Zrotr(ZE, 2) ^ Zrotr(ZE, 13) ^ Zrotr(ZE, 22)) + Ma(ZG, ZE, ZF);
@@ -293,30 +293,28 @@ __kernel void search(
     ZB = ZB + (Zrotr(ZC, 2) ^ Zrotr(ZC, 13) ^ Zrotr(ZC, 22)) + Ma(ZE, ZC, ZD);
     ZW15 = ZW15 + (Zrotr(ZW0, 7) ^ Zrotr(ZW0, 18) ^ (ZW0 >> 3U)) + ZW8 + (Zrotr(ZW13, 17) ^ Zrotr(ZW13, 19) ^ (ZW13 >> 10U));
     ZA = ZA + (Zrotr(ZF, 6) ^ Zrotr(ZF, 11) ^ Zrotr(ZF, 25)) + Ch(ZF, ZG, ZH) + K[63] + ZW15;
-    ZE = ZE + ZA;
-    ZA = ZA + (Zrotr(ZB, 2) ^ Zrotr(ZB, 13) ^ Zrotr(ZB, 22)) + Ma(ZD, ZB, ZC);
 
-    ZW0 = ZA + state0;
+    ZW0 = ZA + state0 + (Zrotr(ZB, 2) ^ Zrotr(ZB, 13) ^ Zrotr(ZB, 22)) + Ma(ZD, ZB, ZC);
     ZW1 = ZB + state1;
     ZW2 = ZC + state2;
     ZW3 = ZD + state3;
-    ZW4 = ZE + state4;
+    ZW4 = ZE + ZA + state4;
     ZW5 = ZF + state5;
     ZW6 = ZG + state6;
     ZW7 = ZH + state7;
 
-    ZH = 0xb0edbdd0 + K[ 0] + ZW0;
-    ZD = 0xa54ff53a + ZH;
-    ZH = ZH + 0x08909ae5U;
-    ZG = 0x1f83d9abU + (Zrotr(ZD, 6) ^ Zrotr(ZD, 11) ^ Zrotr(ZD, 25)) + (0x9b05688cU ^ (ZD & 0xca0b3af3U)) + K[ 1] + ZW1;
-    ZC = 0x3c6ef372U + ZG;
-    ZG = ZG + (Zrotr(ZH, 2) ^ Zrotr(ZH, 13) ^ Zrotr(ZH, 22)) + Ma2(0xbb67ae85U, ZH, 0x6a09e667U);
-    ZF = 0x9b05688cU + (Zrotr(ZC, 6) ^ Zrotr(ZC, 11) ^ Zrotr(ZC, 25)) + Ch(ZC, ZD, 0x510e527fU) + K[ 2] + ZW2;
-    ZB = 0xbb67ae85U + ZF;
-    ZF = ZF + (Zrotr(ZG, 2) ^ Zrotr(ZG, 13) ^ Zrotr(ZG, 22)) + Ma2(0x6a09e667U, ZG, ZH);
-    ZE = 0x510e527fU + (Zrotr(ZB, 6) ^ Zrotr(ZB, 11) ^ Zrotr(ZB, 25)) + Ch(ZB, ZC, ZD) + K[ 3] + ZW3;
-    ZA = 0x6a09e667U + ZE;
-    ZE = ZE + (Zrotr(ZF, 2) ^ Zrotr(ZF, 13) ^ Zrotr(ZF, 22)) + Ma(ZH, ZF, ZG);
+    ZD = 0x98C7E2A2U + ZW0;
+    ZH = 0xFC08884DU + ZW0;
+
+    ZC = 0xCD2A11AEU + (Zrotr(ZD, 6) ^ Zrotr(ZD, 11) ^ Zrotr(ZD, 25)) + Ch(ZD, 0x510e527fU, 0x9b05688cU) +  ZW1;
+    ZG = 0xC3910C8EU + ZC + (Zrotr(ZH, 2) ^ Zrotr(ZH, 13) ^ Zrotr(ZH, 22)) + Ma2(0xbb67ae85U, ZH, 0x6a09e667U);
+
+    ZB = 0x0C2E12E0U + (Zrotr(ZC, 6) ^ Zrotr(ZC, 11) ^ Zrotr(ZC, 25)) + Ch(ZC, ZD, 0x510e527fU) +  ZW2;
+    ZF = 0x4498517BU + ZB + (Zrotr(ZG, 2) ^ Zrotr(ZG, 13) ^ Zrotr(ZG, 22)) + Ma2(ZG, ZH, 0x6a09e667U);
+
+    ZA = 0xA4CE148BU + (Zrotr(ZB, 6) ^ Zrotr(ZB, 11) ^ Zrotr(ZB, 25)) + Ch(ZB, ZC, ZD) +  ZW3;
+    ZE = 0x95F61999U + ZA + (Zrotr(ZF, 2) ^ Zrotr(ZF, 13) ^ Zrotr(ZF, 22)) + Ma(ZH, ZF, ZG);
+
     ZD = ZD + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, ZB, ZC) + K[ 4] + ZW4;
     ZH = ZH + ZD;
     ZD = ZD + (Zrotr(ZE, 2) ^ Zrotr(ZE, 13) ^ Zrotr(ZE, 22)) + Ma(ZG, ZE, ZF);
@@ -329,7 +327,7 @@ __kernel void search(
     ZA = ZA + (Zrotr(ZF, 6) ^ Zrotr(ZF, 11) ^ Zrotr(ZF, 25)) + Ch(ZF, ZG, ZH) + K[ 7] + ZW7;
     ZE = ZE + ZA;
     ZA = ZA + (Zrotr(ZB, 2) ^ Zrotr(ZB, 13) ^ Zrotr(ZB, 22)) + Ma(ZD, ZB, ZC);
-    ZH = ZH + (Zrotr(ZE, 6) ^ Zrotr(ZE, 11) ^ Zrotr(ZE, 25)) + Ch(ZE, ZF, ZG) + K[ 8] + 0x80000000;
+    ZH = ZH + (Zrotr(ZE, 6) ^ Zrotr(ZE, 11) ^ Zrotr(ZE, 25)) + Ch(ZE, ZF, ZG) + K[ 8] + 0x80000000U;
     ZD = ZD + ZH;
     ZH = ZH + (Zrotr(ZA, 2) ^ Zrotr(ZA, 13) ^ Zrotr(ZA, 22)) + Ma(ZC, ZA, ZB);
     ZG = ZG + (Zrotr(ZD, 6) ^ Zrotr(ZD, 11) ^ Zrotr(ZD, 25)) + Ch(ZD, ZE, ZF) + K[ 9];
@@ -385,7 +383,7 @@ __kernel void search(
     ZA = ZA + (Zrotr(ZF, 6) ^ Zrotr(ZF, 11) ^ Zrotr(ZF, 25)) + Ch(ZF, ZG, ZH) + K[23] + ZW7;
     ZE = ZE + ZA;
     ZA = ZA + (Zrotr(ZB, 2) ^ Zrotr(ZB, 13) ^ Zrotr(ZB, 22)) + Ma(ZD, ZB, ZC);
-    ZW8 = 0x80000000 + ZW1 + (Zrotr(ZW6, 17) ^ Zrotr(ZW6, 19) ^ (ZW6 >> 10U));
+    ZW8 = 0x80000000U + ZW1 + (Zrotr(ZW6, 17) ^ Zrotr(ZW6, 19) ^ (ZW6 >> 10U));
     ZH = ZH + (Zrotr(ZE, 6) ^ Zrotr(ZE, 11) ^ Zrotr(ZE, 25)) + Ch(ZE, ZF, ZG) + K[24] + ZW8;
     ZD = ZD + ZH;
     ZH = ZH + (Zrotr(ZA, 2) ^ Zrotr(ZA, 13) ^ Zrotr(ZA, 22)) + Ma(ZC, ZA, ZB);
@@ -518,20 +516,16 @@ __kernel void search(
     ZD = ZD + ZH;
     ZH = ZH + (Zrotr(ZA, 2) ^ Zrotr(ZA, 13) ^ Zrotr(ZA, 22)) + Ma(ZC, ZA, ZB);
     ZW9 = ZW9 + (Zrotr(ZW10, 7) ^ Zrotr(ZW10, 18) ^ (ZW10 >> 3U)) + ZW2 + (Zrotr(ZW7, 17) ^ Zrotr(ZW7, 19) ^ (ZW7 >> 10U));
-    ZG = ZG + (Zrotr(ZD, 6) ^ Zrotr(ZD, 11) ^ Zrotr(ZD, 25)) + Ch(ZD, ZE, ZF) + K[57] + ZW9;
-    ZC = ZC + ZG;
+    ZC = ZC + ZG + (Zrotr(ZD, 6) ^ Zrotr(ZD, 11) ^ Zrotr(ZD, 25)) + Ch(ZD, ZE, ZF) + K[57] + ZW9;
     ZW10 = ZW10 + (Zrotr(ZW11, 7) ^ Zrotr(ZW11, 18) ^ (ZW11 >> 3U)) + ZW3 + (Zrotr(ZW8, 17) ^ Zrotr(ZW8, 19) ^ (ZW8 >> 10U));
-    ZF = ZF + (Zrotr(ZC, 6) ^ Zrotr(ZC, 11) ^ Zrotr(ZC, 25)) + Ch(ZC, ZD, ZE) + K[58] + ZW10;
-    ZB = ZB + ZF;
-    ZW11 = ZW11 + (Zrotr(ZW12, 7) ^ Zrotr(ZW12, 18) ^ (ZW12 >> 3U)) + ZW4 + (Zrotr(ZW9, 17) ^ Zrotr(ZW9, 19) ^ (ZW9 >> 10U));
-    ZE = ZE + (Zrotr(ZB, 6) ^ Zrotr(ZB, 11) ^ Zrotr(ZB, 25)) + Ch(ZB, ZC, ZD) + K[59] + ZW11;
-    ZA = ZA + ZE;
-    ZW12 = ZW12 + (Zrotr(ZW13, 7) ^ Zrotr(ZW13, 18) ^ (ZW13 >> 3U)) + ZW5 + (Zrotr(ZW10, 17) ^ Zrotr(ZW10, 19) ^ (ZW10 >> 10U));
-    ZH = ZH + ZD + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, ZB, ZC) + K[60] + ZW12;
 
-    ZH += 0x5be0cd19U;
+    ZB = ZB + ZF + (Zrotr(ZC, 6) ^ Zrotr(ZC, 11) ^ Zrotr(ZC, 25)) + Ch(ZC, ZD, ZE) + K[58] + ZW10;
 
-    if(ZH == 0) { output[Znonce & 0xFF] = Znonce; }
+    ZA = ZA + ZE + (Zrotr(ZB, 6) ^ Zrotr(ZB, 11) ^ Zrotr(ZB, 25)) + Ch(ZB, ZC, ZD) + K[59] + ZW11 + (Zrotr(ZW12, 7) ^ Zrotr(ZW12, 18) ^ (ZW12 >> 3U)) + ZW4 + (Zrotr(ZW9, 17) ^ Zrotr(ZW9, 19) ^ (ZW9 >> 10U));
+
+    ZH = ZH + ZD + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, ZB, ZC) + ZW12 + (Zrotr(ZW13, 7) ^ Zrotr(ZW13, 18) ^ (ZW13 >> 3U)) + ZW5 + (Zrotr(ZW10, 17) ^ Zrotr(ZW10, 19) ^ (ZW10 >> 10U));
+
+    if(ZH == 0x136032ED) { output[Znonce & 0xFF] = Znonce; }
 #ifdef DOLOOPS
   }
 #endif

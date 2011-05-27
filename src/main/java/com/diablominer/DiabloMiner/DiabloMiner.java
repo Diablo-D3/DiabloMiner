@@ -829,6 +829,8 @@ class DiabloMiner {
                 } else {
                   if(hwcheck)
                     error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
+                  else
+                    edebug("Invalid block found on " + deviceName + ", possible driver or hardware issue");
                 }
               }
 
@@ -896,7 +898,7 @@ class DiabloMiner {
                 .setArg(15, currentWork.midstate[7])
                 .setArg(16, midstate2[1])
                 .setArg(17, midstate2[2])
-                .setArg(18, midstate2[3])
+                .setArg(18, midstate2[3] + 0xB956c25b)
                 .setArg(19, midstate2[5])
                 .setArg(20, midstate2[6])
                 .setArg(21, midstate2[7])
