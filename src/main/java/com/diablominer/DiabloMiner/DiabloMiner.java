@@ -165,9 +165,7 @@ class DiabloMiner {
       }
 
       if(!line.hasOption("url") && !line.hasOption("user")) {
-        throw new ParseException("Requires either --url or --user");
-      } else if(line.hasOption("url") && line.hasOption("user")) {
-        throw new ParseException("Don't use --url and --user at the same time");
+        throw new ParseException("Requires either --url or --user/--pass/--host/--part");
       }
     } catch (ParseException e) {
       System.out.println(e.getLocalizedMessage() + "\n");
@@ -265,9 +263,11 @@ class DiabloMiner {
     }
 
     if(line.hasOption("url")) {
+      url = line.getOptionValue("url").replace("\\@", "+++++");
+
       String protocol = "http";
 
-      String[] split = line.getOptionValue("url").split("://");
+      String[] split = url.split("://");
 
       if(split.length > 1)
         protocol = split[0];
@@ -279,8 +279,12 @@ class DiabloMiner {
 
         split = split[0].split(":");
 
-        user = split[0];
-        pass = split[split.length - 1];
+        if(split[0].length() > 0) {
+          user = split[0];
+
+          if(split.length > 1 && split[1].length() > 0)
+            pass = split[1];
+        }
       } else {
         url = line.getOptionValue("url");
       }
@@ -289,7 +293,7 @@ class DiabloMiner {
       url = "http://"+ ip + ":" + port + "/";
     }
 
-    bitcoind = new URL(url);
+    bitcoind = new URL(url.replace("+++++", "@"));
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim().replace("\r\n", "");
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
