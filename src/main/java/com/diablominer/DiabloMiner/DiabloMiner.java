@@ -77,6 +77,7 @@ class DiabloMiner {
   final static int OUTPUTS = 256;
   final static long TWO32 = 4294967295L;
   final static int CL_MEM_USE_PERSISTENT_MEM_AMD = 1 << 6;
+  final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];
 
   URL bitcoind;
   URL bitcoindLongpoll;
@@ -320,7 +321,7 @@ class DiabloMiner {
     for(int x = 0; x < sourceLines.length; x++) {
       String sourceLine = sourceLines[x];
 
-      if(sourceLine.contains("Z") || sourceLine.contains("z")) {
+      if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__attribute__")) {
         for(int y = 0; y < actualVectors; y++) {
           String replace = sourceLine;
 
@@ -585,6 +586,11 @@ class DiabloMiner {
 
       String compileOptions = "";
 
+      if(forceWorkSize > 0)
+        compileOptions = " -D WORKSIZE=" + forceWorkSize;
+      else
+        compileOptions = " -D WORKSIZE=" + deviceWorkSize;
+
       if(hasBitAlign)
         compileOptions += " -D BITALIGN";
 
@@ -795,10 +801,20 @@ class DiabloMiner {
           System.exit(0);
         }
 
+        buffer = CL10.clEnqueueMapBuffer(queue, output[1], CL10.CL_TRUE, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
+        buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+        CL10.clEnqueueUnmapMemObject(queue, output[1], buffer, null, null);
+
         buffer = CL10.clEnqueueMapBuffer(queue, output[0], CL10.CL_TRUE, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
+        buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+        buffer.position(0);
+
+        boolean submittedBlock;
+        boolean resetBuffer;
 
         while(running) {
-          boolean submittedBlock = false;
+          submittedBlock = false;
+          resetBuffer = false;
 
           for(int z = 0; z < OUTPUTS; z++) {
             int nonce = buffer.getInt(z * 4);
@@ -842,9 +858,12 @@ class DiabloMiner {
                 }
               }
 
-              buffer.putInt(z * 4, 0);
+              resetBuffer = true;
             }
           }
+
+          if(resetBuffer)
+            buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
 
           CL10.clEnqueueUnmapMemObject(queue, output[bufferIndex], buffer, null, null);
 

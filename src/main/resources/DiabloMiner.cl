@@ -42,7 +42,7 @@ __constant uint K[64] = {
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
-__kernel void search(
+__kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     const uint fW0, const uint fW1, const uint fW2,
     const uint fW3, const uint fW15, const uint fW01r,
     const uint fcty_e_plus_e2, const uint fcty_e_plus_state0,
