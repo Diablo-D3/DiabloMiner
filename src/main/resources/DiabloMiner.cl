@@ -56,6 +56,7 @@ __kernel void search(
   z ZA, ZB, ZC, ZD, ZE, ZF, ZG, ZH;
   z ZW0, ZW1, ZW2, ZW3, ZW4, ZW5, ZW6, ZW7, ZW8, ZW9, ZW10, ZW11, ZW12, ZW13, ZW14, ZW15;
   z Znonce = base + get_global_id(0);
+  uint store = 0;
 
   #ifdef DOLOOPS
   Znonce *= (z)LOOPS;
@@ -525,8 +526,11 @@ __kernel void search(
 
     ZH = ZH + ZD + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, ZB, ZC) + ZW12 + (Zrotr(ZW13, 7) ^ Zrotr(ZW13, 18) ^ (ZW13 >> 3U)) + ZW5 + (Zrotr(ZW10, 17) ^ Zrotr(ZW10, 19) ^ (ZW10 >> 10U));
 
-    if(ZH == 0x136032ED) { output[Znonce & 0xFF] = Znonce; }
+    store = select(store, Znonce, ZH == 0x136032ED);
 #ifdef DOLOOPS
   }
 #endif
+
+  if(store != 0)
+    output[store & 0xFF] = store;
 }
