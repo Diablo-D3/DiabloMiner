@@ -164,10 +164,6 @@ class DiabloMiner {
       if(line.hasOption("help")) {
         throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
       }
-
-      if(!line.hasOption("url") && !line.hasOption("user")) {
-        throw new ParseException("Requires either --url or --user/--pass/--host/--part");
-      }
     } catch (ParseException e) {
       System.out.println(e.getLocalizedMessage() + "\n");
       HelpFormatter formatter = new HelpFormatter();
@@ -932,14 +928,13 @@ class DiabloMiner {
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
 
-          if(err !=  CL10.CL_SUCCESS) {
-            if(err != CL10.CL_INVALID_KERNEL_ARGS) {
-              error("Failed to queue kernel, error " + err);
-              System.exit(0);
-            } else {
-              debug("Spurious CL_INVALID_KERNEL_ARGS, ignoring");
-            }
+          if(err !=  CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
+            error("Failed to queue kernel, error " + err);
+            System.exit(0);
           } else {
+            if(err == CL10.CL_INVALID_KERNEL_ARGS)
+              debug("Spurious CL_INVALID_KERNEL_ARGS, ignoring");
+
             hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
             deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
             currentWork.base += workSizeTemp.get(0) * loops * vectors;
