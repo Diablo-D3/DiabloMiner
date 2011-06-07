@@ -134,6 +134,7 @@ class DiabloMiner {
     String pass = "miner";
     String ip = "127.0.0.1";
     String port = "8332";
+    String path = "";
     String url = "url";
 
     Options options = new Options();
@@ -269,28 +270,43 @@ class DiabloMiner {
       if(split.length > 1)
         protocol = split[0];
 
-      split = split[split.length - 1].split("@");
+      split = split[split.length - 1].split("/", 2);
+
+      if(split.length > 1)
+        path = split[1];
+
+      split = split[0].split("@");
+
+      String[] split2;
 
       if(split.length > 1) {
-        url = protocol + "://" + split[1];
+        split2 = split[0].split(":");
 
-        split = split[0].split(":");
+        if(split2[0].length() > 0) {
+          user = split2[0];
 
-        if(split[0].length() > 0) {
-          user = split[0];
-
-          if(split.length > 1 && split[1].length() > 0)
-            pass = split[1];
+          if(split2.length > 1 && split2[1].length() > 0)
+            pass = split2[1];
         }
-      } else {
-        url = line.getOptionValue("url");
       }
 
+      split2 = split[split.length - 1].split(":");
+
+      if(split2[0].length() > 0) {
+        ip = split2[0];
+
+        if(split2.length > 1 && split2[1].length() > 0)
+          port = split2[1];
+      }
+
+      url = protocol + "://" + ip + ":" + port + "/" + path;
     } else {
       url = "http://"+ ip + ":" + port + "/";
     }
 
-    bitcoind = new URL(url.replace("+++++", "@"));
+    user = user.replace("+++++", "@");
+
+    bitcoind = new URL(url);
     userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim().replace("\r\n", "");
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
