@@ -353,7 +353,7 @@ class DiabloMiner {
                 replace = replace.replace(";", " + (uint4)(" + vectorBase + ", " + (vectorBase + vectorOffset) +  ", " + (vectorBase + vectorOffset * 2) +  ", " + (vectorBase + vectorOffset * 3) + ");");
                 vectorBase += vectorOffset * 4;
               }
-            } else if(sourceLine.contains("select")) {
+            } else if(sourceLine.contains("0x136032ED")) {
               if(vectorWidth ==  2) {
                 replace = replace.replace("ZH", "ZH.x").replaceAll("nonce", "nonce.x")
                         + replace.replace("ZH", "ZH.y").replaceAll("nonce", "nonce.y");
@@ -587,9 +587,8 @@ class DiabloMiner {
       byte[] exta = new byte[1024];
       extb.get(exta);
 
-      if(new String(exta).contains("cl_amd_media_ops")) {
+      if(new String(exta).contains("cl_amd_media_ops"))
         hasBitAlign = true;
-      }
 
       if(zloops > 1)
         loops = zloops;
@@ -761,7 +760,7 @@ class DiabloMiner {
     }
 
     class ExecutionState implements Runnable {
-      CLCommandQueue queue;
+      final CLCommandQueue queue;
       ByteBuffer buffer;
       final CLMem output[] = new CLMem[2];
       int bufferIndex = 0;
@@ -783,9 +782,6 @@ class DiabloMiner {
       int err;
 
       ExecutionState() throws NoSuchAlgorithmException {
-      }
-
-      public void run() {
         queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);
 
         if(queue == null || errBuf.get(0) != CL10.CL_SUCCESS) {
@@ -815,12 +811,15 @@ class DiabloMiner {
 
         buffer = CL10.clEnqueueMapBuffer(queue, output[1], CL10.CL_TRUE, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
         buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+        buffer.position(0);
         CL10.clEnqueueUnmapMemObject(queue, output[1], buffer, null, null);
 
         buffer = CL10.clEnqueueMapBuffer(queue, output[0], CL10.CL_TRUE, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
         buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
         buffer.position(0);
+      }
 
+      public void run() {
         boolean submittedBlock;
         boolean resetBuffer;
 
@@ -874,8 +873,11 @@ class DiabloMiner {
             }
           }
 
-          if(resetBuffer)
+          if(resetBuffer) {
             buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+            buffer.position(0);
+          }
+
 
           CL10.clEnqueueUnmapMemObject(queue, output[bufferIndex], buffer, null, null);
 
