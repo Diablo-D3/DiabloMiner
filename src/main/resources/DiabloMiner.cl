@@ -63,7 +63,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
 
   uint it;
   const z Zloopnonce = Znonce;
-  for(it = LOOPS; it != 0; i--) {
+  for(it = LOOPS; it != 0; it--) {
     Znonce = (LOOPS - it) ^ Zloopnonce;
   #endif
     

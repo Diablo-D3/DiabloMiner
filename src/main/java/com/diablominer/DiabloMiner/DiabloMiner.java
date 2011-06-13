@@ -121,6 +121,7 @@ class DiabloMiner {
 
   final static String UPPER[] = { "X", "Y", "Z", "W", "T", "A", "B", "C" };
   final static String LOWER[] = { "x", "y", "z", "w", "t", "a", "b", "c" };
+  final static String CLEAR = "                                                                             ";
 
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
@@ -511,26 +512,26 @@ class DiabloMiner {
   }
 
   void info(String msg) {
-    System.out.println("\r" + getDateTime() + " " + msg);
+    System.out.println("\r" + CLEAR + "\r" + getDateTime() + " " + msg);
     mainThread.interrupt();
   }
 
   void debug(String msg) {
     if(debug) {
-      System.out.println("\r" + getDateTime() + " DEBUG: " + msg);
+      System.out.println("\r" + CLEAR + "\r" + getDateTime() + " DEBUG: " + msg);
       mainThread.interrupt();
     }
   }
 
   void edebug(String msg) {
     if(edebug) {
-      System.out.println("\r" + getDateTime() + " DEBUG: " + msg);
+      System.out.println("\r" + CLEAR + "\r" + getDateTime() + " DEBUG: " + msg);
       mainThread.interrupt();
     }
   }
 
   void error(String msg) {
-    System.err.println("\r" + getDateTime() + " ERROR: " + msg);
+    System.err.println("\r" + CLEAR + "\r" + getDateTime() + " ERROR: " + msg);
     mainThread.interrupt();
   }
 
