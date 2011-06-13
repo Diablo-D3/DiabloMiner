@@ -116,6 +116,7 @@ class DiabloMiner {
   AtomicLong currentBlocks = new AtomicLong(0);
   AtomicLong currentAttempts = new AtomicLong(0);
   AtomicLong currentRejects = new AtomicLong(0);
+  AtomicLong currentHWErrors = new AtomicLong(0);
   Set<String> enabledDevices = null;
 
   final static String UPPER[] = { "X", "Y", "Z", "W", "T", "A", "B", "C" };
@@ -436,17 +437,19 @@ class DiabloMiner {
       long now = getNow();
       long currentHashCount = hashCount.get();
       long adjustedHashCount = (currentHashCount - previousHashCount) / (now - previousAdjustedStartTime);
-      long hashLongCount = currentHashCount / (now - startTime);
+      double hashLongCount = currentHashCount / (now - startTime) / 1000.0;
 
       if(now - startTime > TIME_OFFSET * 2) {
-        long averageHashCount = (adjustedHashCount + previousAdjustedHashCount) / 2;
+        double averageHashCount = (adjustedHashCount + previousAdjustedHashCount) / 2 / 1000.0;
 
         hashMeter.setLength(0);
 
         if(!debug) {
-          hashMeterFormatter.format("\r%d/%d khash/sec", averageHashCount, hashLongCount);
+          hashMeterFormatter.format("\rmhash %.1f/%.1f | accept: %d | reject: %d | hw error: %d",
+                averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
         } else {
-          hashMeterFormatter.format("\r%d/%d khash/sec | ghash: ", averageHashCount, hashLongCount);
+          hashMeterFormatter.format("\rmhash %.1f/%.1f | a/r/hwe: %d/%d/%d | ghash: ",
+                averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
 
           double basisAverage = 0.0;
 
@@ -863,9 +866,9 @@ class DiabloMiner {
                   submittedBlock = true;
                 } else {
                   if(hwcheck)
-                    error("Invalid block found on " + deviceName + ", possible driver or hardware issue");
+                    error("Invalid solution " + currentHWErrors.incrementAndGet() + " found on " + deviceName + ", possible driver or hardware issue");
                   else
-                    edebug("Invalid block found on " + deviceName + ", possible driver or hardware issue");
+                    edebug("Invalid solution " + currentHWErrors.incrementAndGet() + " found on " + deviceName + ", possible driver or hardware issue");
                 }
               }
 
@@ -1052,11 +1055,12 @@ class DiabloMiner {
             connection = (HttpURLConnection) bitcoind.openConnection(proxy);
 
           if(!longPoll)
-            connection.setConnectTimeout(5000);
+            connection.setConnectTimeout(15000);
 
           connection.setRequestProperty("Authorization", userPassword);
           connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
           connection.setRequestProperty("Content-Type", "application/json");
+          connection.setRequestProperty("Cache-Control", "no-cache");
           connection.setDoOutput(true);
 
           OutputStream requestStream = connection.getOutputStream();
@@ -1261,7 +1265,7 @@ class DiabloMiner {
 
               while(longpollIncoming.get() != null)
                 try {
-                  Thread.sleep(5000);
+                  Thread.sleep(1000);
                 } catch (InterruptedException e) {}
             }
           }
