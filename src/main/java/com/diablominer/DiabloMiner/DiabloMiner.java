@@ -554,7 +554,7 @@ class DiabloMiner {
 
     final PointerBuffer localWorkSize = BufferUtils.createPointerBuffer(1);
 
-    final ExecutionState executions[] = new ExecutionState[EXECUTION_TOTAL];;
+    final ExecutionState executions[] = new ExecutionState[EXECUTION_TOTAL];
 
     AtomicLong deviceHashCount = new AtomicLong(0);
 
@@ -563,7 +563,6 @@ class DiabloMiner {
     long lastTime = startTime;
 
     boolean hasBitAlign = false;
-    boolean isSDK24 = false;
     int loops = 1;
 
     DeviceState(CLPlatform platform, CLDevice device, int count) throws Exception {
@@ -582,9 +581,6 @@ class DiabloMiner {
           error(errinfo);
         }
       }, null);
-
-      if(platform.getInfoString(CL10.CL_PLATFORM_NAME).contains("AMD"))
-        isSDK24 = true;
 
       ByteBuffer extb = BufferUtils.createByteBuffer(1024);
       CL10.clGetDeviceInfo(device, CL10.CL_DEVICE_EXTENSIONS, extb, null);
@@ -765,7 +761,7 @@ class DiabloMiner {
 
     class ExecutionState implements Runnable {
       final CLCommandQueue queue;
-      ByteBuffer buffer;
+      ByteBuffer buffer[] = new ByteBuffer[2];
       final CLMem output[] = new CLMem[2];
       int bufferIndex = 0;
 
@@ -793,34 +789,21 @@ class DiabloMiner {
           System.exit(0);
         }
 
-        if(isSDK24)
-          output[0] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY | CL_MEM_USE_PERSISTENT_MEM_AMD, 4 * OUTPUTS, errBuf);
-        else
-          output[0] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
+        buffer[0] = BufferUtils.createByteBuffer(4 * OUTPUTS);
+        buffer[1] = BufferUtils.createByteBuffer(4 * OUTPUTS);
 
-        if(output[0] == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-          error("Failed to allocate output buffer");
-          System.exit(0);
+        for(int i = 0; i < 2; i++) {
+          output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY | CL10.CL_MEM_ALLOC_HOST_PTR, 4 * OUTPUTS, errBuf);
+          //output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
+          if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
+            error("Failed to allocate output buffer");
+            System.exit(0);
+          }
+
+          buffer[i].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+          buffer[i].position(0);
+          CL10.clEnqueueWriteBuffer(queue, output[i], CL10.CL_TRUE, 0, buffer[i], null, null);
         }
-
-        if(isSDK24)
-          output[1] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY | CL_MEM_USE_PERSISTENT_MEM_AMD, 4 * OUTPUTS, errBuf);
-        else
-          output[1] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
-
-        if(output[1] == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-          error("Failed to allocate output buffer");
-          System.exit(0);
-        }
-
-        buffer = CL10.clEnqueueMapBuffer(queue, output[1], CL10.CL_TRUE, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
-        buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
-        buffer.position(0);
-        CL10.clEnqueueUnmapMemObject(queue, output[1], buffer, null, null);
-
-        buffer = CL10.clEnqueueMapBuffer(queue, output[0], CL10.CL_TRUE, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
-        buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
-        buffer.position(0);
       }
 
       public void run() {
@@ -832,7 +815,7 @@ class DiabloMiner {
           resetBuffer = false;
 
           for(int z = 0; z < OUTPUTS; z++) {
-            int nonce = buffer.getInt(z * 4);
+            int nonce = buffer[bufferIndex].getInt(z * 4);
 
             if(nonce != 0) {
               for(int j = 0; j < 19; j++)
@@ -878,12 +861,11 @@ class DiabloMiner {
           }
 
           if(resetBuffer) {
-            buffer.put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
-            buffer.position(0);
+            buffer[bufferIndex].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+            buffer[bufferIndex].position(0);
           }
 
-
-          CL10.clEnqueueUnmapMemObject(queue, output[bufferIndex], buffer, null, null);
+          CL10.clEnqueueWriteBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
 
           if(submittedBlock) {
             if(!longpoll) {
@@ -892,10 +874,7 @@ class DiabloMiner {
             }
           }
 
-          if(bufferIndex != 0)
-            bufferIndex = 0;
-          else
-            bufferIndex = 1;
+          bufferIndex = (bufferIndex == 0) ? 1 : 0;
 
           workSizeTemp.put(0, workSize);
           currentWork.update(workSizeTemp.get(0) * loops * vectors);
@@ -961,7 +940,10 @@ class DiabloMiner {
             deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
             currentWork.base += workSizeTemp.get(0) * loops * vectors;
             runs.incrementAndGet();
-            buffer = CL10.clEnqueueMapBuffer(queue, output[bufferIndex], CL10.CL_TRUE, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
+            err = CL10.clEnqueueReadBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
+
+            if(err != CL10.CL_SUCCESS)
+              error("Read buffer error: " + err);
           }
         }
       }
@@ -1088,7 +1070,7 @@ class DiabloMiner {
                       (bitcoind.getFile() + "/" + xlongpolling).replace("//", "/"));
 
               if(longpoll == false) {
-                getworkRefresh = 120000;
+                getworkRefresh = 60000;
                 longpoll = true;
 
                 debug("Enabling long poll support");
