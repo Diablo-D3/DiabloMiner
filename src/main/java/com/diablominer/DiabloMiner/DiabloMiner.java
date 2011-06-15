@@ -943,7 +943,7 @@ class DiabloMiner {
             System.exit(0);
           } else {
             if(err != CL10.CL_SUCCESS) {
-              error("Read buffer error: " + err);
+              debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
               skip = true;
             } else {
               hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
