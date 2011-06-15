@@ -946,15 +946,16 @@ class DiabloMiner {
               debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
               skip = true;
             } else {
-              hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
-              deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
-              currentWork.base += workSizeTemp.get(0) * loops * vectors;
-              runs.incrementAndGet();
               err = CL10.clEnqueueReadBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
 
               if(err != CL10.CL_SUCCESS)
                 error("Failed to queue read buffer, error " + err);
             }
+
+            hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
+            deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
+            currentWork.base += workSizeTemp.get(0) * loops * vectors;
+            runs.incrementAndGet();
           }
         }
       }
