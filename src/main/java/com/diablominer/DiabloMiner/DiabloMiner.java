@@ -808,69 +808,78 @@ class DiabloMiner {
       public void run() {
         boolean submittedBlock;
         boolean resetBuffer;
+        boolean skip = false;
 
         while(running) {
           submittedBlock = false;
           resetBuffer = false;
 
-          for(int z = 0; z < OUTPUTS; z++) {
-            int nonce = buffer[bufferIndex].getInt(z * 4);
+          if(skip == false) {
+            for(int z = 0; z < OUTPUTS; z++) {
+              int nonce = buffer[bufferIndex].getInt(z * 4);
 
-            if(nonce != 0) {
-              for(int j = 0; j < 19; j++)
-                digestInput.putInt(j*4, currentWork.data[j]);
+              if(nonce != 0) {
+                for(int j = 0; j < 19; j++)
+                  digestInput.putInt(j*4, currentWork.data[j]);
 
-              digestInput.putInt(19*4, nonce);
+                digestInput.putInt(19*4, nonce);
 
-              digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
+                digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
 
-              long G =
-                    ((long)(0xFF & digestOutput[27]) << 24) |
-                    ((long)(0xFF & digestOutput[26]) << 16) |
-                    ((long)(0xFF & digestOutput[25]) << 8) |
-                    ((long)(0xFF & digestOutput[24]));
+                long G =
+                  ((long)(0xFF & digestOutput[27]) << 24) |
+                  ((long)(0xFF & digestOutput[26]) << 16) |
+                  ((long)(0xFF & digestOutput[25]) << 8) |
+                  ((long)(0xFF & digestOutput[24]));
 
-              long H =
-                    ((long)(0xFF & digestOutput[31]) << 24) |
-                    ((long)(0xFF & digestOutput[30]) << 16) |
-                    ((long)(0xFF & digestOutput[29]) << 8)  |
-                    ((long)(0xFF & digestOutput[28]));
+                long H =
+                  ((long)(0xFF & digestOutput[31]) << 24) |
+                  ((long)(0xFF & digestOutput[30]) << 16) |
+                  ((long)(0xFF & digestOutput[29]) << 8)  |
+                  ((long)(0xFF & digestOutput[28]));
 
-              edebug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
+                edebug("Attempt " + currentAttempts.incrementAndGet() + " found on " + deviceName);
 
-              if(G <= currentWork.target[6]) {
-                if(H == 0) {
-                  if(currentWork.sendWork(nonce)) {
-                    info("Block " + currentBlocks.incrementAndGet() + " found on " + deviceName);
+                if(G <= currentWork.target[6]) {
+                  if(H == 0) {
+                    try {
+                      if(currentWork.sendWork(nonce)) {
+                        info("Block " + currentBlocks.incrementAndGet() + " found on " + deviceName);
+                      } else {
+                        info("Rejected block " + currentRejects.incrementAndGet() + " found on " + deviceName);
+                      }
+                    } catch(IOException e) {
+                      error("Connection failed: " + e.getLocalizedMessage());
+                    }
+
+                    submittedBlock = true;
                   } else {
-                    info("Rejected block " + currentRejects.incrementAndGet() + " found on " + deviceName);
+                    if(hwcheck)
+                      error("Invalid solution " + currentHWErrors.incrementAndGet() + " found on " + deviceName + ", possible driver or hardware issue");
+                    else
+                      edebug("Invalid solution " + currentHWErrors.incrementAndGet() + " found on " + deviceName + ", possible driver or hardware issue");
                   }
-
-                  submittedBlock = true;
-                } else {
-                  if(hwcheck)
-                    error("Invalid solution " + currentHWErrors.incrementAndGet() + " found on " + deviceName + ", possible driver or hardware issue");
-                  else
-                    edebug("Invalid solution " + currentHWErrors.incrementAndGet() + " found on " + deviceName + ", possible driver or hardware issue");
                 }
+
+                resetBuffer = true;
               }
+            }
 
-              resetBuffer = true;
+            if(resetBuffer) {
+              buffer[bufferIndex].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+              buffer[bufferIndex].position(0);
+              CL10.clEnqueueWriteBuffer(queue, output[bufferIndex], CL10.CL_FALSE, 0, buffer[bufferIndex], null, null);
+            }
+
+            if(submittedBlock) {
+              if(!longpoll) {
+                edebug("Forcing getwork update due to block submission");
+                currentWork.forceUpdate();
+              }
             }
           }
 
-          if(resetBuffer) {
-            buffer[bufferIndex].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
-            buffer[bufferIndex].position(0);
-            CL10.clEnqueueWriteBuffer(queue, output[bufferIndex], CL10.CL_FALSE, 0, buffer[bufferIndex], null, null);
-          }
-
-          if(submittedBlock) {
-            if(!longpoll) {
-              edebug("Forcing getwork update due to block submission");
-              currentWork.forceUpdate();
-            }
-          }
+          skip = false;
 
           bufferIndex = (bufferIndex == 0) ? 1 : 0;
 
@@ -933,6 +942,7 @@ class DiabloMiner {
           } else {
             if(err == CL10.CL_INVALID_KERNEL_ARGS) {
               debug("Spurious CL_INVALID_KERNEL_ARGS, ignoring");
+              skip = true;
             } else {
               hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
               deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
@@ -1011,7 +1021,7 @@ class DiabloMiner {
           base = 0;
         }
 
-        boolean sendWork(int nonce) {
+        boolean sendWork(int nonce) throws IOException {
           data[19] = nonce;
 
           ObjectNode sendworkMessage = mapper.createObjectNode();
@@ -1020,12 +1030,7 @@ class DiabloMiner {
           params.add(encodeBlock());
           sendworkMessage.put("id", 1);
 
-          try {
-            return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage, false).getBooleanValue();
-          } catch(IOException e) {
-            error("Connection failed: " + e.getLocalizedMessage());
-            return false;
-          }
+          return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage, false).getBooleanValue();
         }
 
         JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage, boolean longPoll) throws IOException {
