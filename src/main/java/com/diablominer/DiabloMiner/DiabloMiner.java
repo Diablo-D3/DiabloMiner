@@ -1013,6 +1013,8 @@ class DiabloMiner {
               base = 0;
 
               data[17]++;
+
+              return;
             }
           }
 
@@ -1257,10 +1259,14 @@ class DiabloMiner {
                 debug("Long poll getwork returned");
               } catch(IOException e) {
                 error("Cannot connect to Bitcoin: " + e.getLocalizedMessage());
-                while(longPollIncoming.get() != null) {
+                while(longPollIncoming.get() == null) {
                   try {
                     longPollIncoming.set(doJSONRPC(bitcoind, userPass, mapper, getWorkMessage, true));
-                  } catch (IOException f) { }
+                  } catch (IOException f) {
+                    try {
+                      Thread.sleep(1000);
+                    } catch (InterruptedException e1) { }
+                  }
                 }
               }
 
@@ -1297,6 +1303,10 @@ class DiabloMiner {
                   if(!error) {
                     error("Cannot connect to Bitcoin: " + e.getLocalizedMessage());
                     error = true;
+
+                    try {
+                      Thread.sleep(1000);
+                    } catch (InterruptedException e1) { }
                   }
                 }
               }
