@@ -41,6 +41,8 @@ import java.util.Formatter;
 import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPInputStream;
@@ -80,10 +82,10 @@ class DiabloMiner {
   final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];
 
   URL bitcoind;
-  URL bitcoindLongpoll;
+  URL bitcoindLongPoll;
   Proxy proxy = null;
   String userPass;
-  int getworkRefresh = 5000;
+  int getWorkRefresh = 5000;
 
   boolean hwcheck = true;
   boolean debug = false;
@@ -146,7 +148,7 @@ class DiabloMiner {
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true, "bitcoin host port");
-    options.addOption("g", "getwork", true, "seconds between getwork refresh");
+    options.addOption("g", "getWork", true, "seconds between getWork refresh");
     options.addOption("D", "devices", true, "devices to enable");
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
     options.addOption("l", "url", true, "bitcoin host url");
@@ -188,8 +190,8 @@ class DiabloMiner {
     if(line.hasOption("worksize"))
       forceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
 
-    if(line.hasOption("getwork"))
-      getworkRefresh = Integer.parseInt(line.getOptionValue("getwork")) * 1000;
+    if(line.hasOption("getWork"))
+      getWorkRefresh = Integer.parseInt(line.getOptionValue("getWork")) * 1000;
 
     if(line.hasOption("debug"))
       debug = true;
@@ -765,7 +767,7 @@ class DiabloMiner {
       final CLMem output[] = new CLMem[2];
       int bufferIndex = 0;
 
-      boolean longpoll = false;
+      boolean longPoll = false;
 
       final int[] midstate2 = new int[16];
 
@@ -844,16 +846,7 @@ class DiabloMiner {
 
                 if(G <= currentWork.target[6]) {
                   if(H == 0) {
-                    try {
-                      if(currentWork.sendWork(nonce)) {
-                        info("Block " + currentBlocks.incrementAndGet() + " found on " + deviceName);
-                      } else {
-                        info("Rejected block " + currentRejects.incrementAndGet() + " found on " + deviceName);
-                      }
-                    } catch(IOException e) {
-                      error("Connection failed: " + e.getLocalizedMessage());
-                    }
-
+                    currentWork.sendWork(nonce);
                     submittedBlock = true;
                   } else {
                     if(hwcheck)
@@ -874,7 +867,7 @@ class DiabloMiner {
             }
 
             if(submittedBlock) {
-              if(!longpoll) {
+              if(!longPoll) {
                 edebug("Forcing getwork update due to block submission");
                 currentWork.forceUpdate();
               }
@@ -969,19 +962,23 @@ class DiabloMiner {
         Formatter dataFormatter = new Formatter(dataOutput);
 
         final ObjectMapper mapper = new ObjectMapper();
-        final ObjectNode getworkMessage = mapper.createObjectNode();
+        final ObjectNode getWorkMessage = mapper.createObjectNode();
 
         long lastPulled = 0;
         long base = 0;
 
-        AtomicReference<JsonNode> longpollIncoming = new AtomicReference<JsonNode>(null);
+        AtomicReference<JsonNode> longPollIncoming = new AtomicReference<JsonNode>(null);
+        LinkedBlockingDeque<ObjectNode> sendWorkIncoming = new LinkedBlockingDeque<ObjectNode>();
 
         GetWorkParser() {
-          getworkMessage.put("method", "getwork");
-          getworkMessage.putArray("params");
-          getworkMessage.put("id", 1);
+          new Thread(new sendWorkAsync(), "DiabloMiner Async Send Work for " +
+                Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
 
-          getWork();
+          getWorkMessage.put("method", "getwork");
+          getWorkMessage.putArray("params");
+          getWorkMessage.put("id", 1);
+
+          getWork(false);
         }
 
         void forceUpdate() {
@@ -995,21 +992,28 @@ class DiabloMiner {
         }
 
         void update(long delta) {
-          if(longpoll && longpollIncoming.get() != null) {
+          if(longPoll && longPollIncoming.get() != null) {
             getWorkAsync();
           } else if(base + delta > TWO32) {
             debug("Forcing getwork update due to nonce saturation");
-            getWork();
-          } else if(lastPulled + getworkRefresh < getNow()) {
-            getWork();
+            getWork(true);
+          } else if(lastPulled + getWorkRefresh < getNow()) {
+            getWork(false);
           }
         }
 
-        void getWork() {
+        void getWork(boolean nonceSaturation) {
           try {
-            parse(doJSONRPC(bitcoind, userPass, mapper, getworkMessage, false));
+            parse(doJSONRPC(bitcoind, userPass, mapper, getWorkMessage, true));
           } catch(IOException e) {
-            error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+            error("Cannot connect to Bitcoin: " + e.getLocalizedMessage());
+
+            if(nonceSaturation) {
+              lastPulled = getNow();
+              base = 0;
+
+              data[17]++;
+            }
           }
 
           lastPulled = getNow();
@@ -1017,26 +1021,26 @@ class DiabloMiner {
         }
 
         void getWorkAsync() {
-          JsonNode json = longpollIncoming.getAndSet(null);
+          JsonNode json = longPollIncoming.getAndSet(null);
 
           parse(json);
           lastPulled = getNow();
           base = 0;
         }
 
-        boolean sendWork(int nonce) throws IOException {
+        void sendWork(int nonce) {
           data[19] = nonce;
 
-          ObjectNode sendworkMessage = mapper.createObjectNode();
-          sendworkMessage.put("method", "getwork");
-          ArrayNode params = sendworkMessage.putArray("params");
+          ObjectNode sendWorkMessage = mapper.createObjectNode();
+          sendWorkMessage.put("method", "getwork");
+          ArrayNode params = sendWorkMessage.putArray("params");
           params.add(encodeBlock());
-          sendworkMessage.put("id", 1);
+          sendWorkMessage.put("id", 1);
 
-          return doJSONRPC(bitcoind, userPass, mapper, sendworkMessage, false).getBooleanValue();
+          sendWorkIncoming.add(sendWorkMessage);
         }
 
-        JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage, boolean longPoll) throws IOException {
+        JsonNode doJSONRPC(URL bitcoind, String userPassword, ObjectMapper mapper, ObjectNode requestMessage, boolean timeout) throws IOException {
         	HttpURLConnection connection;
 
           if(proxy == null)
@@ -1044,7 +1048,7 @@ class DiabloMiner {
           else
             connection = (HttpURLConnection) bitcoind.openConnection(proxy);
 
-          if(!longPoll)
+          if(timeout)
             connection.setConnectTimeout(15000);
 
           connection.setRequestProperty("Authorization", userPassword);
@@ -1064,26 +1068,28 @@ class DiabloMiner {
           InputStream responseStream = null;
 
           try {
-            String xlongpolling = connection.getHeaderField("X-Long-Polling");
+            if("getwork".equals(requestMessage.get("method").getTextValue())) {
+              String xLongPolling = connection.getHeaderField("X-Long-Polling");
 
-            if(xlongpolling != null) {
-              if(xlongpolling.startsWith("http"))
-                bitcoindLongpoll = new URL(xlongpolling);
-              else if(xlongpolling.startsWith("/"))
-                bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
-                      xlongpolling);
-              else
-                bitcoindLongpoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
-                      (bitcoind.getFile() + "/" + xlongpolling).replace("//", "/"));
+              if(xLongPolling != null) {
+                if(xLongPolling.startsWith("http"))
+                  bitcoindLongPoll = new URL(xLongPolling);
+                else if(xLongPolling.startsWith("/"))
+                  bitcoindLongPoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
+                        xLongPolling);
+                else
+                  bitcoindLongPoll = new URL(bitcoind.getProtocol(), bitcoind.getHost(), bitcoind.getPort(),
+                        (bitcoind.getFile() + "/" + xLongPolling).replace("//", "/"));
 
-              if(longpoll == false) {
-                getworkRefresh = 60000;
-                longpoll = true;
+                if(longPoll == false) {
+                  new Thread(new getWorkAsync(), "DiabloMiner Long Poll for " +
+                        Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
 
-                debug("Enabling long poll support");
+                  getWorkRefresh = 60000;
+                  longPoll = true;
 
-                new Thread(new getWorkAsync(), "DiabloMiner Long Poll for " +
-                      Thread.currentThread().getName().replace("DiabloMiner ", "")).start();
+                  debug("Enabling long poll support");
+                }
               }
             }
 
@@ -1247,16 +1253,53 @@ class DiabloMiner {
           public void run() {
             while(running) {
               try {
-                longpollIncoming.set(doJSONRPC(bitcoindLongpoll, userPass, mapper, getworkMessage, true));
+                longPollIncoming.set(doJSONRPC(bitcoindLongPoll, userPass, mapper, getWorkMessage, false));
                 debug("Long poll getwork returned");
               } catch(IOException e) {
-                error("Can't connect to Bitcoin: " + e.getLocalizedMessage());
+                error("Cannot connect to Bitcoin: " + e.getLocalizedMessage());
+                while(longPollIncoming.get() != null) {
+                  try {
+                    longPollIncoming.set(doJSONRPC(bitcoind, userPass, mapper, getWorkMessage, true));
+                  } catch (IOException f) { }
+                }
               }
 
-              while(longpollIncoming.get() != null)
+              while(longPollIncoming.get() != null)
                 try {
                   Thread.sleep(1000);
                 } catch (InterruptedException e) {}
+            }
+          }
+        }
+
+        class sendWorkAsync implements Runnable {
+          public void run() {
+            while(running) {
+              ObjectNode sendWork = null;
+              boolean error = false;
+
+              try {
+                sendWork = sendWorkIncoming.take();
+              } catch (InterruptedException e) { }
+
+              while(sendWork != null) {
+                try {
+                  boolean accepted = doJSONRPC(bitcoind, userPass, mapper, sendWork, true).getBooleanValue();
+
+                  if(accepted) {
+                    info("Accepted block " + currentBlocks.incrementAndGet() + " found on " + deviceName);
+                  } else {
+                    info("Rejected block " + currentRejects.incrementAndGet() + " found on " + deviceName);
+                  }
+
+                  sendWork = null;
+                } catch (IOException e) {
+                  if(!error) {
+                    error("Cannot connect to Bitcoin: " + e.getLocalizedMessage());
+                    error = true;
+                  }
+                }
+              }
             }
           }
         }
