@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPInputStream;
@@ -78,7 +77,6 @@ class DiabloMiner {
   final static long TIME_OFFSET = 7500;
   final static int OUTPUTS = 16;
   final static long TWO32 = 4294967295L;
-  final static int CL_MEM_USE_PERSISTENT_MEM_AMD = 1 << 6;
   final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];
 
   URL bitcoind;
@@ -1012,7 +1010,7 @@ class DiabloMiner {
               lastPulled = getNow();
               base = 0;
 
-              data[17]++;
+              data[17] = Integer.reverseBytes(Integer.reverseBytes(data[17]) + 1);
 
               return;
             }
