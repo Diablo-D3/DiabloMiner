@@ -76,7 +76,7 @@ import org.lwjgl.opencl.CLProgram;
 class DiabloMiner {
   final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 7500;
-  final static int OUTPUTS = 256;
+  final static int OUTPUTS = 16;
   final static long TWO32 = 4294967295L;
   final static int CL_MEM_USE_PERSISTENT_MEM_AMD = 1 << 6;
   final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];

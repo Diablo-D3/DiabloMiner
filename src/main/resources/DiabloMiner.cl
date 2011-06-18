@@ -525,7 +525,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
 
     ZH = ZH + ZD + (Zrotr(ZA, 6) ^ Zrotr(ZA, 11) ^ Zrotr(ZA, 25)) + Ch(ZA, ZB, ZC) + ZW12 + (Zrotr(ZW13, 7) ^ Zrotr(ZW13, 18) ^ (ZW13 >> 3U)) + ZW5 + (Zrotr(ZW10, 17) ^ Zrotr(ZW10, 19) ^ (ZW10 >> 10U));
 
-    if(ZH == 0x136032ED) { output[Znonce & 0xFF] = Znonce; }
+    if(ZH == 0x136032ED) { output[Znonce & 0xF] = Znonce; }
 #ifdef DOLOOPS
   }
 #endif
