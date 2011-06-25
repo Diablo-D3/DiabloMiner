@@ -363,13 +363,13 @@ class DiabloMiner {
               }
             } else if(sourceLine.contains("0x136032ED")) {
               if(vectorWidth ==  2) {
-                replace = replace.replace("ZH", "ZH.x").replaceAll("nonce", "nonce.x")
-                        + replace.replace("ZH", "ZH.y").replaceAll("nonce", "nonce.y");
+                replace = replace.replace("ZV[7]", "ZV[7].x").replaceAll("nonce", "nonce.x")
+                        + replace.replace("ZV[7]", "ZV[7].y").replaceAll("nonce", "nonce.y");
               } else if(vectorWidth == 4) {
-                replace = replace.replace("ZH", "ZH.s0").replaceAll("nonce", "nonce.s0")
-                        + replace.replace("ZH", "ZH.s1").replaceAll("nonce", "nonce.s1")
-                        + replace.replace("ZH", "ZH.s2").replaceAll("nonce", "nonce.s2")
-                        + replace.replace("ZH", "ZH.s3").replaceAll("nonce", "nonce.s3");
+                replace = replace.replace("ZV[7]", "ZV[7].s0").replaceAll("nonce", "nonce.s0")
+                        + replace.replace("ZV[7]", "ZV[7].s1").replaceAll("nonce", "nonce.s1")
+                        + replace.replace("ZV[7]", "ZV[7].s2").replaceAll("nonce", "nonce.s2")
+                        + replace.replace("ZV[7]", "ZV[7].s3").replaceAll("nonce", "nonce.s3");
               }
             }
           } else {
@@ -902,47 +902,44 @@ class DiabloMiner {
           sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.data[17], 0x71374491);
           sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.data[18], 0xB5C0FBCF);
 
-          int fW0 = currentWork.data[16] + (rot(currentWork.data[17], 7) ^ rot(currentWork.data[17], 18) ^
+          int W16 = currentWork.data[16] + (rot(currentWork.data[17], 7) ^ rot(currentWork.data[17], 18) ^
                     (currentWork.data[17] >>> 3));
-          int fW1 = currentWork.data[17] + (rot(currentWork.data[18], 7) ^ rot(currentWork.data[18], 18) ^
+          int W17 = currentWork.data[17] + (rot(currentWork.data[18], 7) ^ rot(currentWork.data[18], 18) ^
                     (currentWork.data[18] >>> 3)) + 0x01100000;
-          int fW2 = currentWork.data[18] + (rot(fW0, 17) ^ rot(fW0, 19) ^ (fW0 >>> 10));
-          int fW3 = 0x11002000 + (rot(fW1, 17) ^ rot(fW1, 19) ^ (fW1 >>> 10));
-          int fW15 = 0x00000280 + (rot(fW0, 7) ^ rot(fW0, 18) ^ (fW0 >>> 3));
-          int fW01r = fW0 + (rot(fW1, 7) ^ rot(fW1, 18) ^ (fW1 >>> 3));
+          int W2 = currentWork.data[18];
+          //int fW3 = 0x11002000 + (rot(W17, 17) ^ rot(W17, 19) ^ (W17 >>> 10));
+          //int fW15 = 0x00000280 + (rot(W16, 7) ^ rot(W16, 18) ^ (W16 >>> 3));
+          //int fW01r = W16 + (rot(W17, 7) ^ rot(W17, 18) ^ (W17 >>> 3));
 
-          int fcty_e = currentWork.midstate[4] + (rot(midstate2[1], 6) ^ rot(midstate2[1], 11) ^ rot(midstate2[1], 25)) +
+          int PreVal4 = currentWork.midstate[4] + (rot(midstate2[1], 6) ^ rot(midstate2[1], 11) ^ rot(midstate2[1], 25)) +
                        (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
-          int fcty_e2 = (rot(midstate2[5], 2) ^ rot(midstate2[5], 13) ^ rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) |
+          int T1 = (rot(midstate2[5], 2) ^ rot(midstate2[5], 13) ^ rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) |
                         (midstate2[7] & (midstate2[5] | midstate2[6])));
 
-          int fcty_e_plus_e2 = fcty_e + fcty_e2;
-          int fcty_e_plus_state0 = fcty_e + currentWork.midstate[0];
+          //int PreVal4_plus_T1 = PreVal4 + T1;
+          //int PreVal4_plus_state0 = PreVal4 + currentWork.midstate[0];
 
-          kernel.setArg(0, fW0)
-                .setArg(1, fW1)
-                .setArg(2, fW2)
-                .setArg(3, fW3)
-                .setArg(4, fW15)
-                .setArg(5, fW01r)
-                .setArg(6, fcty_e_plus_e2)
-                .setArg(7, fcty_e_plus_state0)
-                .setArg(8, currentWork.midstate[0])
-                .setArg(9, currentWork.midstate[1])
-                .setArg(10, currentWork.midstate[2])
-                .setArg(11, currentWork.midstate[3])
-                .setArg(12, currentWork.midstate[4])
-                .setArg(13, currentWork.midstate[5])
-                .setArg(14, currentWork.midstate[6])
-                .setArg(15, currentWork.midstate[7])
-                .setArg(16, midstate2[1])
-                .setArg(17, midstate2[2])
-                .setArg(18, midstate2[3] + 0xB956c25b)
-                .setArg(19, midstate2[5])
-                .setArg(20, midstate2[6])
-                .setArg(21, midstate2[7])
-                .setArg(22, (int)(currentWork.base / loops / vectors))
-                .setArg(23, output[bufferIndex]);
+          kernel.setArg(0, currentWork.midstate[0])
+                .setArg(1, currentWork.midstate[1])
+                .setArg(2, currentWork.midstate[2])
+                .setArg(3, currentWork.midstate[3])
+                .setArg(4, currentWork.midstate[4])
+                .setArg(5, currentWork.midstate[5])
+                .setArg(6, currentWork.midstate[6])
+                .setArg(7, currentWork.midstate[7])
+                .setArg(8, midstate2[1])
+                .setArg(9, midstate2[2])
+                .setArg(10, midstate2[3])
+                .setArg(11, midstate2[5])
+                .setArg(12, midstate2[6])
+                .setArg(13, midstate2[7])
+                .setArg(14, (int)(currentWork.base / loops / vectors))
+                .setArg(15, W2)
+                .setArg(16, W16)
+                .setArg(17, W17)
+                .setArg(18, PreVal4)
+                .setArg(19, T1)
+                .setArg(20, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
 
