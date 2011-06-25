@@ -20,16 +20,14 @@ typedef uint z;
 
 #if BITALIGN
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
-#define Zrotr(a, b) amd_bitalign((z)a, (z)a, (z)b)
+#define Zrotr(a, b) amd_bitalign((z)a, (z)a, (z)(32 - b))
 #define Ch(a, b, c) amd_bytealign(a, b, c)
 #define Ma(a, b, c) amd_bytealign((b), (a | c), (c & a))
 #else
-#define Zrotr(a, b) rotate((z)a, (z)(32 - b))
+#define Zrotr(a, b) rotate((z)a, (z)b)
 #define Ch(a, b, c) (c ^ (a & (b ^ c)))
 #define Ma(a, b, c) ((b & c) | (a & (b | c)))
 #endif
-
-#define Ma2(a, b, c) ((b & c) | (a & (b | c)))
 
 __constant uint K[64] = {
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -68,7 +66,7 @@ __constant uint H[8] = {
 #define Zsharound2(n) { ZV[(3 + 128 - (n)) % 8] += Zt1W(n); ZV[(7 + 128 - (n)) % 8] = Zt1W(n) + Zt2(n); }
 #define Zsharound(n) { Zt1 = Zt1(n); ZV[(3 + 128 - (n)) % 8] += Zt1(n); ZV[(7 + 128 - (n)) % 8] = Zt1(n) + Zt2(n); }
 
-#define Zpartround(n) { ZV[(7 + 128 - n) % 8] = (ZV[(7 + 128 - n) % 8]+ZW[n]); ZV[(3 + 128 - n) % 8] += ZV[(7 + 128 - n) % 8]; ZV[(7 + 128 - n) % 8] += Zt1; }
+#define Zpartround(n) { ZV[(7 + 128 - n) % 8] = (ZV[(7 + 128 - n) % 8] + ZW[n]); ZV[(3 + 128 - n) % 8] += ZV[(7 + 128 - n) % 8]; ZV[(7 + 128 - n) % 8] += Zt1; }
 
 __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     const uint state0, const uint state1, const uint state2, const uint state3,
@@ -83,7 +81,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
 {
   z ZV[8];
   z ZW[128];
-  z Zt1 = T1;
+  z Zt1;
   
   z Znonce = base + get_global_id(0);
 
@@ -96,6 +94,8 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     Znonce = (LOOPS - it) ^ Zloopnonce;
   #endif
 
+    Zt1 = T1;
+
     ZV[0] = state0;
     ZV[1] = b1;
     ZV[2] = c1;
@@ -106,6 +106,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZV[7] = h1;
 
     ZW[2] = W2;
+    ZW[3] = Znonce;
     ZW[4] = 0x80000000U;
     ZW[5] = 0x00000000U;
     ZW[6] = 0x00000000U;
@@ -335,7 +336,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     Zpartround(64 + 60);
     ZV[7] += H[7];
 
-    if(ZV[7] == 0x136032ED) { output[Znonce & 0xF] = Znonce; }
+    if(ZV[7] == 0) { output[Znonce & 0xF] = Znonce; }
 #ifdef DOLOOPS
   }
 #endif

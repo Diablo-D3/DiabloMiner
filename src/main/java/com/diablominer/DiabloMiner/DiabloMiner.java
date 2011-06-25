@@ -361,7 +361,7 @@ class DiabloMiner {
                 replace = replace.replace(";", " + (uint4)(" + vectorBase + ", " + (vectorBase + vectorOffset) +  ", " + (vectorBase + vectorOffset * 2) +  ", " + (vectorBase + vectorOffset * 3) + ");");
                 vectorBase += vectorOffset * 4;
               }
-            } else if(sourceLine.contains("0x136032ED")) {
+            } else if(sourceLine.contains("& 0xF")) {
               if(vectorWidth ==  2) {
                 replace = replace.replace("ZV[7]", "ZV[7].x").replaceAll("nonce", "nonce.x")
                         + replace.replace("ZV[7]", "ZV[7].y").replaceAll("nonce", "nonce.y");
