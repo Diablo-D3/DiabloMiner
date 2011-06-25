@@ -41,7 +41,7 @@ __constant uint K[64] = {
 };
 
 __constant uint H[8] = { 
-   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+  0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 };
 
 #define Zs0(n) (Zrotr(ZV[(0 + 128 - (n)) % 8], 30) ^ Zrotr(ZV[(0 + 128 - (n)) % 8], 19) ^ Zrotr(ZV[(0 + 128 - (n)) % 8], 10))
@@ -54,14 +54,14 @@ __constant uint H[8] = {
 
 #define Zw(n) (ZW[n] = ZP1(n) + ZP2(n) + ZP3(n) + ZP4(n))
 
-#define ZR(x) (ZW[x] = (Zrotr(ZW[x-2], 15) ^ Zrotr(ZW[x-2], 13) ^ ((ZW[x-2])>>10U)) + ZW[x-7] + (Zrotr(ZW[x-15], 25) ^ Zrotr(ZW[x-15], 14) ^ ((ZW[x-15])>>3U)) + ZW[x-16])
+#define ZR(x) (ZW[x] = (Zrotr(ZW[x - 2], 15) ^ Zrotr(ZW[x - 2], 13) ^ ((ZW[x - 2]) >> 10U)) + ZW[x - 7] + (Zrotr(ZW[x - 15], 25) ^ Zrotr(ZW[x - 15], 14) ^ ((ZW[x - 15]) >> 3U)) + ZW[x - 16])
 
-#define ZR0(n) ((Zrotr(ZW[(n)],25) ^ Zrotr(ZW[(n)],14) ^ ((ZW[(n)])>>3U)))
-#define ZR1(n) ((Zrotr(ZW[(n)],15) ^ Zrotr(ZW[(n)],13) ^ ((ZW[(n)])>>10U)))
-#define ZP1(x) ZR1(x-2)
-#define ZP2(x) ZR0(x-15)
-#define ZP3(x) ZW[x-7]
-#define ZP4(x) ZW[x-16]
+#define ZR0(n) ((Zrotr(ZW[(n)], 25) ^ Zrotr(ZW[(n)], 14) ^ ((ZW[(n)]) >> 3U)))
+#define ZR1(n) ((Zrotr(ZW[(n)], 15) ^ Zrotr(ZW[(n)], 13) ^ ((ZW[(n)]) >> 10U)))
+#define ZP1(x) ZR1(x - 2)
+#define ZP2(x) ZR0(x - 15)
+#define ZP3(x) ZW[x - 7]
+#define ZP4(x) ZW[x - 16]
 
 #define Zsharound2(n) { ZV[(3 + 128 - (n)) % 8] += Zt1W(n); ZV[(7 + 128 - (n)) % 8] = Zt1W(n) + Zt2(n); }
 #define Zsharound(n) { Zt1 = Zt1(n); ZV[(3 + 128 - (n)) % 8] += Zt1(n); ZV[(7 + 128 - (n)) % 8] = Zt1(n) + Zt2(n); }
@@ -106,7 +106,6 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZV[7] = h1;
 
     ZW[2] = W2;
-    ZW[3] = Znonce;
     ZW[4] = 0x80000000U;
     ZW[5] = 0x00000000U;
     ZW[6] = 0x00000000U;
@@ -188,6 +187,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     Zsharound2(43);
     Zsharound2(44);
     Zsharound2(45);
+    Zsharound2(46);
     ZR(47);
     Zsharound(47);
     ZR(48);
@@ -330,9 +330,9 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     Zsharound2(64 + 57);
     Zsharound2(64 + 58);
     Zsharound2(64 + 59);
-    
+
     ZV[3] += K[60] + Zs1(124) + Zch(124);
-    ZR(64+60);
+    ZR(64 + 60);
     Zpartround(64 + 60);
     ZV[7] += H[7];
 
