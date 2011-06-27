@@ -22,7 +22,7 @@ typedef uint z;
 #pragma OPENCL EXTENSION cl_amd_media_ops : enable
 #define Zrotr(a, b) amd_bitalign((z)a, (z)a, (z)(32 - b))
 #define Ch(a, b, c) amd_bytealign(a, b, c)
-#define Ma(a, b, c) amd_bytealign((b), (a | c), (c & a))
+#define Ma(a, b, c) amd_bytealign((c ^ a), (b), (a))
 #else
 #define Zrotr(a, b) rotate((z)a, (z)b)
 #define Ch(a, b, c) (c ^ (a & (b ^ c)))
