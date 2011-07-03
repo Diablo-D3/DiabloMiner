@@ -906,18 +906,18 @@ class DiabloMiner {
                     (currentWork.data[17] >>> 3));
           int W17 = currentWork.data[17] + (rot(currentWork.data[18], 7) ^ rot(currentWork.data[18], 18) ^
                     (currentWork.data[18] >>> 3)) + 0x01100000;
-          int W2 = currentWork.data[18];
-          //int fW3 = 0x11002000 + (rot(W17, 17) ^ rot(W17, 19) ^ (W17 >>> 10));
-          //int fW15 = 0x00000280 + (rot(W16, 7) ^ rot(W16, 18) ^ (W16 >>> 3));
-          //int fW01r = W16 + (rot(W17, 7) ^ rot(W17, 18) ^ (W17 >>> 3));
+          int W18 = currentWork.data[18] + (rot(W16, 17) ^ rot(W16, 19) ^ (W16 >>> 10)) ;
+          int W19 = 0x11002000 + (rot(W17, 17) ^ rot(W17, 19) ^ (W17 >>> 10));
+          int W31 = 0x00000280 + (rot(W16, 7) ^ rot(W16, 18) ^ (W16 >>> 3));
+          int W32 = W16 + (rot(W17, 7) ^ rot(W17, 18) ^ (W17 >>> 3));
 
           int PreVal4 = currentWork.midstate[4] + (rot(midstate2[1], 6) ^ rot(midstate2[1], 11) ^ rot(midstate2[1], 25)) +
                        (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
           int T1 = (rot(midstate2[5], 2) ^ rot(midstate2[5], 13) ^ rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) |
                         (midstate2[7] & (midstate2[5] | midstate2[6])));
 
-          //int PreVal4_plus_T1 = PreVal4 + T1;
-          //int PreVal4_plus_state0 = PreVal4 + currentWork.midstate[0];
+          int PreVal4_plus_state0 = PreVal4 + currentWork.midstate[0];
+          int PreVal4_plus_T1 = PreVal4 + T1;
 
           kernel.setArg(0, currentWork.midstate[0])
                 .setArg(1, currentWork.midstate[1])
@@ -934,12 +934,15 @@ class DiabloMiner {
                 .setArg(12, midstate2[6])
                 .setArg(13, midstate2[7])
                 .setArg(14, (int)(currentWork.base / loops / vectors))
-                .setArg(15, W2)
-                .setArg(16, W16)
-                .setArg(17, W17)
-                .setArg(18, PreVal4)
-                .setArg(19, T1)
-                .setArg(20, output[bufferIndex]);
+                .setArg(15, W16)
+                .setArg(16, W17)
+                .setArg(17, W18)
+                .setArg(18, W19)
+                .setArg(19, W31)
+                .setArg(20, W32)
+                .setArg(21, PreVal4_plus_state0)
+                .setArg(22, PreVal4_plus_T1)
+                .setArg(23, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
 
@@ -1278,7 +1281,7 @@ class DiabloMiner {
               }
 
               try {
-                Thread.sleep(100);
+                Thread.sleep(500);
               } catch (InterruptedException e1) { }
             }
           }
@@ -1321,7 +1324,7 @@ class DiabloMiner {
             }
 
             try {
-              Thread.sleep(100);
+              Thread.sleep(500);
             } catch (InterruptedException e1) { }
           }
         }
@@ -1356,7 +1359,7 @@ class DiabloMiner {
         forceUpdate();
 
         try {
-          Thread.sleep(1000);
+          Thread.sleep(500);
         } catch (InterruptedException e) {}
       }
     }
