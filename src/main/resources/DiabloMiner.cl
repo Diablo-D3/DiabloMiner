@@ -55,7 +55,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
   z ZV[8];
   z ZW[128];
   z Zt1;
-  
+
   z Znonce = base + get_global_id(0);
 
   #ifdef DOLOOPS
@@ -466,20 +466,23 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     Zt1 = (ZV[0] + K[55] + ZW[119] + (Ch(ZV[5], ZV[6], ZV[7])) + (Zrotr(ZV[5], 26) ^ Zrotr(ZV[5], 21) ^ Zrotr(ZV[5], 7)));
     ZV[4] += Zt1;
     ZV[0] = Zt1 + ((Zrotr(ZV[1], 30) ^ Zrotr(ZV[1], 19) ^ Zrotr(ZV[1], 10)) + (Ma(ZV[2], ZV[3], ZV[1])));
-    ZV[3] += (ZV[7] + K[56] + (ZW[120] = (Zrotr(ZW[118], 15) ^ Zrotr(ZW[118], 13) ^ ((ZW[118]) >> 10U)) + (Zrotr(ZW[105], 25) ^ Zrotr(ZW[105], 14) ^ ((ZW[105]) >> 3U)) + ZW[113] + ZW[104]) + (Ch(ZV[4], ZV[5], ZV[6])) + (Zrotr(ZV[4], 26) ^ Zrotr(ZV[4], 21) ^ Zrotr(ZV[4], 7)));
-    ZV[7] = (ZV[7] + K[56] + (ZW[120] = (Zrotr(ZW[118], 15) ^ Zrotr(ZW[118], 13) ^ ((ZW[118]) >> 10U)) + (Zrotr(ZW[105], 25) ^ Zrotr(ZW[105], 14) ^ ((ZW[105]) >> 3U)) + ZW[113] + ZW[104]) + (Ch(ZV[4], ZV[5], ZV[6])) + (Zrotr(ZV[4], 26) ^ Zrotr(ZV[4], 21) ^ Zrotr(ZV[4], 7))) + ((Zrotr(ZV[0], 30) ^ Zrotr(ZV[0], 19) ^ Zrotr(ZV[0], 10)) + (Ma(ZV[1], ZV[2], ZV[0])));
-    ZV[2] += (ZV[6] + K[57] + (ZW[121] = (Zrotr(ZW[119], 15) ^ Zrotr(ZW[119], 13) ^ ((ZW[119]) >> 10U)) + (Zrotr(ZW[106], 25) ^ Zrotr(ZW[106], 14) ^ ((ZW[106]) >> 3U)) + ZW[114] + ZW[105]) + (Ch(ZV[3], ZV[4], ZV[5])) + (Zrotr(ZV[3], 26) ^ Zrotr(ZV[3], 21) ^ Zrotr(ZV[3], 7)));
-    ZV[6] = (ZV[6] + K[57] + (ZW[121] = (Zrotr(ZW[119], 15) ^ Zrotr(ZW[119], 13) ^ ((ZW[119]) >> 10U)) + (Zrotr(ZW[106], 25) ^ Zrotr(ZW[106], 14) ^ ((ZW[106]) >> 3U)) + ZW[114] + ZW[105]) + (Ch(ZV[3], ZV[4], ZV[5])) + (Zrotr(ZV[3], 26) ^ Zrotr(ZV[3], 21) ^ Zrotr(ZV[3], 7))) + ((Zrotr(ZV[7], 30) ^ Zrotr(ZV[7], 19) ^ Zrotr(ZV[7], 10)) + (Ma(ZV[0], ZV[1], ZV[7])));
-    ZV[1] += (ZV[5] + K[58] + (ZW[122] = (Zrotr(ZW[120], 15) ^ Zrotr(ZW[120], 13) ^ ((ZW[120]) >> 10U)) + (Zrotr(ZW[107], 25) ^ Zrotr(ZW[107], 14) ^ ((ZW[107]) >> 3U)) + ZW[115] + ZW[106]) + (Ch(ZV[2], ZV[3], ZV[4])) + (Zrotr(ZV[2], 26) ^ Zrotr(ZV[2], 21) ^ Zrotr(ZV[2], 7)));
-    ZV[5] = (ZV[5] + K[58] + (ZW[122] = (Zrotr(ZW[120], 15) ^ Zrotr(ZW[120], 13) ^ ((ZW[120]) >> 10U)) + (Zrotr(ZW[107], 25) ^ Zrotr(ZW[107], 14) ^ ((ZW[107]) >> 3U)) + ZW[115] + ZW[106]) + (Ch(ZV[2], ZV[3], ZV[4])) + (Zrotr(ZV[2], 26) ^ Zrotr(ZV[2], 21) ^ Zrotr(ZV[2], 7))) + ((Zrotr(ZV[6], 30) ^ Zrotr(ZV[6], 19) ^ Zrotr(ZV[6], 10)) + (Ma(ZV[7], ZV[0], ZV[6])));
-    ZV[0] += (ZV[4] + K[59] + (ZW[123] = (Zrotr(ZW[121], 15) ^ Zrotr(ZW[121], 13) ^ ((ZW[121]) >> 10U)) + (Zrotr(ZW[108], 25) ^ Zrotr(ZW[108], 14) ^ ((ZW[108]) >> 3U)) + ZW[116] + ZW[107]) + (Ch(ZV[1], ZV[2], ZV[3])) + (Zrotr(ZV[1], 26) ^ Zrotr(ZV[1], 21) ^ Zrotr(ZV[1], 7)));
-    ZV[4] = (ZV[4] + K[59] + (ZW[123] = (Zrotr(ZW[121], 15) ^ Zrotr(ZW[121], 13) ^ ((ZW[121]) >> 10U)) + (Zrotr(ZW[108], 25) ^ Zrotr(ZW[108], 14) ^ ((ZW[108]) >> 3U)) + ZW[116] + ZW[107]) + (Ch(ZV[1], ZV[2], ZV[3])) + (Zrotr(ZV[1], 26) ^ Zrotr(ZV[1], 21) ^ Zrotr(ZV[1], 7))) + ((Zrotr(ZV[5], 30) ^ Zrotr(ZV[5], 19) ^ Zrotr(ZV[5], 10)) + (Ma(ZV[6], ZV[7], ZV[5])));
 
+    ZV[3] += (ZV[7] + K[56] + (ZW[120] = (Zrotr(ZW[118], 15) ^ Zrotr(ZW[118], 13) ^ ((ZW[118]) >> 10U)) + (Zrotr(ZW[105], 25) ^ Zrotr(ZW[105], 14) ^ ((ZW[105]) >> 3U)) + ZW[113] + ZW[104]) + (Ch(ZV[4], ZV[5], ZV[6])) + (Zrotr(ZV[4], 26) ^ Zrotr(ZV[4], 21) ^ Zrotr(ZV[4], 7)));
+
+    ZW[120] = (Zrotr(ZW[118], 15) ^ Zrotr(ZW[118], 13) ^ ((ZW[118]) >> 10U)) + (Zrotr(ZW[105], 25) ^ Zrotr(ZW[105], 14) ^ ((ZW[105]) >> 3U)) + ZW[113] + ZW[104];
+    ZV[7] = (ZV[7] + K[56] + ZW[120] + (Ch(ZV[4], ZV[5], ZV[6])) + (Zrotr(ZV[4], 26) ^ Zrotr(ZV[4], 21) ^ Zrotr(ZV[4], 7))) + ((Zrotr(ZV[0], 30) ^ Zrotr(ZV[0], 19) ^ Zrotr(ZV[0], 10)) + (Ma(ZV[1], ZV[2], ZV[0])));
+    ZW[121] = (Zrotr(ZW[119], 15) ^ Zrotr(ZW[119], 13) ^ ((ZW[119]) >> 10U)) + (Zrotr(ZW[106], 25) ^ Zrotr(ZW[106], 14) ^ ((ZW[106]) >> 3U)) + ZW[114] + ZW[105];
+    ZV[2] += (ZV[6] + K[57] + ZW[121] + (Ch(ZV[3], ZV[4], ZV[5])) + (Zrotr(ZV[3], 26) ^ Zrotr(ZV[3], 21) ^ Zrotr(ZV[3], 7)));
+    ZW[121] = (Zrotr(ZW[119], 15) ^ Zrotr(ZW[119], 13) ^ ((ZW[119]) >> 10U)) + (Zrotr(ZW[106], 25) ^ Zrotr(ZW[106], 14) ^ ((ZW[106]) >> 3U)) + ZW[114] + ZW[105];
+
+    ZW[122] = (Zrotr(ZW[120], 15) ^ Zrotr(ZW[120], 13) ^ ((ZW[120]) >> 10U)) + (Zrotr(ZW[107], 25) ^ Zrotr(ZW[107], 14) ^ ((ZW[107]) >> 3U)) + ZW[115] + ZW[106]; 
+    ZV[1] += (ZV[5] + K[58] + ZW[122] + (Ch(ZV[2], ZV[3], ZV[4])) + (Zrotr(ZV[2], 26) ^ Zrotr(ZV[2], 21) ^ Zrotr(ZV[2], 7)));
+    ZW[123] = (Zrotr(ZW[121], 15) ^ Zrotr(ZW[121], 13) ^ ((ZW[121]) >> 10U)) + (Zrotr(ZW[108], 25) ^ Zrotr(ZW[108], 14) ^ ((ZW[108]) >> 3U)) + ZW[116] + ZW[107];
+    ZV[0] += (ZV[4] + K[59] + ZW[123] + (Ch(ZV[1], ZV[2], ZV[3])) + (Zrotr(ZV[1], 26) ^ Zrotr(ZV[1], 21) ^ Zrotr(ZV[1], 7)));
     ZV[3] += K[60] + (Zrotr(ZV[0], 26) ^ Zrotr(ZV[0], 21) ^ Zrotr(ZV[0], 7)) + (Ch(ZV[0], ZV[1], ZV[2]));
-    (ZW[124] = (Zrotr(ZW[122], 15) ^ Zrotr(ZW[122], 13) ^ ((ZW[122]) >> 10U)) + ZW[117] + (Zrotr(ZW[109], 25) ^ Zrotr(ZW[109], 14) ^ ((ZW[109]) >> 3U)) + ZW[108]);
-    ZV[3] = (ZV[3] + ZW[124]);
+    ZW[124] = (Zrotr(ZW[122], 15) ^ Zrotr(ZW[122], 13) ^ ((ZW[122]) >> 10U)) + ZW[117] + (Zrotr(ZW[109], 25) ^ Zrotr(ZW[109], 14) ^ ((ZW[109]) >> 3U)) + ZW[108];    
+    ZV[3] = ZV[3] + ZW[124];
     ZV[7] += ZV[3];
-    ZV[3] += Zt1;
 
     if(ZV[7] == 0xA41F32E7) { output[Znonce & 0xF] = Znonce; }
 #ifdef DOLOOPS
