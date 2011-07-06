@@ -79,6 +79,7 @@
               <outfile>DiabloMiner-Windows.exe</outfile>
               <jar>target/DiabloMiner.jar</jar>
               <errTitle>DiabloMiner</errTitle>
+              <chdir>.</chdir>
               <classPath>
                 <mainClass>com.diablominer.DiabloMiner.DiabloMiner</mainClass>
                 <preCp>%EXEDIR%\target\libs\*</preCp>

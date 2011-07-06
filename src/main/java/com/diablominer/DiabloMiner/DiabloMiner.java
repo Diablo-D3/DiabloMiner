@@ -455,10 +455,10 @@ class DiabloMiner {
         hashMeter.setLength(0);
 
         if(!debug) {
-          hashMeterFormatter.format("\rmhash %.1f/%.1f | accept: %d | reject: %d | hw error: %d",
+          hashMeterFormatter.format("\rmhash: %.1f/%.1f | accept: %d | reject: %d | hw error: %d",
                 averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
         } else {
-          hashMeterFormatter.format("\rmhash %.1f/%.1f | a/r/hwe: %d/%d/%d | ghash: ",
+          hashMeterFormatter.format("\rmhash: %.1f/%.1f | a/r/hwe: %d/%d/%d | ghash: ",
                 averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
 
           double basisAverage = 0.0;
@@ -791,7 +791,7 @@ class DiabloMiner {
       final ByteBuffer digestInput = ByteBuffer.allocate(80);
       byte[] digestOutput;
 
-      final GetWorkParser currentWork = this.new GetWorkParser();
+      GetWorkParser currentWork;
 
       final PointerBuffer workSizeTemp = BufferUtils.createPointerBuffer(1);
 
@@ -828,6 +828,8 @@ class DiabloMiner {
         boolean submittedBlock;
         boolean resetBuffer;
         boolean skip = false;
+
+        currentWork = this.new GetWorkParser();
 
         while(running) {
           submittedBlock = false;
@@ -982,7 +984,7 @@ class DiabloMiner {
         AtomicReference<JsonNode> getWorkIncoming = new AtomicReference<JsonNode>(null);
 
         GetWorkParser() {
-          getWork(false);
+          getWork(true);
 
           while(getWorkIncoming.get() == null) {}
 
@@ -1103,6 +1105,8 @@ class DiabloMiner {
 
       if(timeout)
         connection.setConnectTimeout(15000);
+      else
+        connection.setConnectTimeout(10 * 60 * 1000);
 
       connection.setRequestProperty("Authorization", userPassword);
       connection.setRequestProperty("Accept-Encoding", "gzip,deflate");

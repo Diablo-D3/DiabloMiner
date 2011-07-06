@@ -32,7 +32,7 @@ typedef uint z;
 #define ZR25(n) ((Zrotr(ZW[(n)], 25) ^ Zrotr(ZW[(n)], 14) ^ ((ZW[(n)]) >> 3U)))
 #define ZR15(n) ((Zrotr(ZW[(n)], 15) ^ Zrotr(ZW[(n)], 13) ^ ((ZW[(n)]) >> 10U)))
 #define ZR26(n) ((Zrotr(ZV[(n)], 26) ^ Zrotr(ZV[(n)], 21) ^ Zrotr(ZV[(n)], 7)))
-#define ZR30(n) ((Zrotr(ZV[(n)], 30) ^ Zrotr(ZV[(n)], 19) ^ Zrotr(ZV[(n)], 10)) 
+#define ZR30(n) ((Zrotr(ZV[(n)], 30) ^ Zrotr(ZV[(n)], 19) ^ Zrotr(ZV[(n)], 10))) 
 
 __constant uint K[64] = {
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
