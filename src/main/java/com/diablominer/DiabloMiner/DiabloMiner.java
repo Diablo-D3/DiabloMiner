@@ -931,7 +931,7 @@ class DiabloMiner {
                 .setArg(7, currentWork.midstate[7])
                 .setArg(8, midstate2[1])
                 .setArg(9, midstate2[2])
-                .setArg(10, midstate2[3])
+                .setArg(10, midstate2[3] + 0xB956c25b)
                 .setArg(11, midstate2[5])
                 .setArg(12, midstate2[6])
                 .setArg(13, midstate2[7])
