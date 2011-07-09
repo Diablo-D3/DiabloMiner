@@ -1103,10 +1103,13 @@ class DiabloMiner {
       else
         connection = (HttpURLConnection) bitcoind.openConnection(proxy);
 
-      if(timeout)
+      if(timeout) {
         connection.setConnectTimeout(15000);
-      else
+        connection.setReadTimeout(15000);
+      } else {
         connection.setConnectTimeout(10 * 60 * 1000);
+        connection.setReadTimeout(10 * 60 * 1000);
+      }
 
       connection.setRequestProperty("Authorization", userPassword);
       connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
