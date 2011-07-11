@@ -684,7 +684,8 @@ class DiabloMiner {
 
         String xSwitchTo = connection.getHeaderField("X-Switch-To");
 
-        if(!"".equals(xSwitchTo)) {
+        if(xSwitchTo != null &&  !"".equals(xSwitchTo)) {
+          String oldHost = queryUrl.getHost();
           JsonNode newHost = mapper.readTree(xSwitchTo);
 
           queryUrl = new URL(queryUrl.getProtocol(), newHost.get("host").getValueAsText(),
@@ -693,6 +694,8 @@ class DiabloMiner {
           if(longPollUrl != null)
             longPollUrl = new URL(longPollUrl.getProtocol(), newHost.get("host").getValueAsText(),
                   newHost.get("port").getIntValue(), longPollUrl.getPath());
+
+          info(oldHost + ": Switched to " + queryUrl.getHost());
         }
 
         if(connection.getContentEncoding() != null) {
