@@ -278,16 +278,16 @@ class DiabloMiner {
       networkStatesCount = splitUrl.length;
 
     if(splitUser != null)
-      Math.max(splitUser.length, networkStatesCount);
+      networkStatesCount = Math.max(splitUser.length, networkStatesCount);
 
     if(splitPass != null)
-      Math.max(splitPass.length, networkStatesCount);
+      networkStatesCount = Math.max(splitPass.length, networkStatesCount);
 
     if(splitHost != null)
-      Math.max(splitHost.length, networkStatesCount);
+      networkStatesCount = Math.max(splitHost.length, networkStatesCount);
 
     if(splitPort != null)
-      Math.max(splitPort.length, networkStatesCount);
+      networkStatesCount = Math.max(splitPort.length, networkStatesCount);
 
     networkStates = new NetworkState[networkStatesCount];
 
