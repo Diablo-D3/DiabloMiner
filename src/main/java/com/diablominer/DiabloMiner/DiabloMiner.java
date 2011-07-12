@@ -533,7 +533,8 @@ class DiabloMiner {
     for(int i = 0; i < deviceStatesCount; i++) {
       executions = deviceStates.get(i).executions;
       for(int j = 0; j < EXECUTION_TOTAL; j++)
-        executions[j].currentWork.lastPulled = 0;
+        if(executions[j].currentWork != null)
+          executions[j].currentWork.lastPulled = 0;
     }
   }
 
