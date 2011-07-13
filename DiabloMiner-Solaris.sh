@@ -3,4 +3,4 @@ export GPU_USE_SYNC_OBJECTS=1
 export DISPLAY=`echo $DISPLAY | sed 's/\.[0-9]//'`
 export COMPUTE=$DISPLAY
 cd $(dirname ${0})
-java -Xmx32m -cp target/libs/*:target/DiabloMiner.jar -Djava.library.path=target/libs/natives/solaris com.diablominer.DiabloMiner.DiabloMiner $@
+exec java -Xmx32m -cp target/libs/*:target/DiabloMiner.jar -Djava.library.path=target/libs/natives/solaris com.diablominer.DiabloMiner.DiabloMiner $@
