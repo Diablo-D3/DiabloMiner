@@ -537,9 +537,9 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZW[0] = ZR15(2) + ZR25(16) + ZW[8] + ZW[17];
     ZV[1] += ZV[5] + K[58] + ZW[0] + Ch(ZV[2], ZV[3], ZV[4]) + ZR26(2);
     ZV[0] += ZV[4] + K[59] + ZR15(1) + ZR25(15) + ZW[6] + ZW[16] + Ch(ZV[1], ZV[2], ZV[3]) + ZR26(1);
-    ZV[7] += ZV[3] + K[60] + ZR26(0) + Ch(ZV[0], ZV[1], ZV[2]) + ZR15(0) + ZW[7] + ZR25(14) + ZW[15];
+    ZV[7] += ZV[3] + ZR26(0) + Ch(ZV[0], ZV[1], ZV[2]) + ZR15(0) + ZW[7] + ZR25(14) + ZW[15];
 
-    if(ZV[7] == 0xA41F32E7) { output[Znonce & 0xF] = Znonce; }
+    if(ZV[7] == 0x136032ED) { output[Znonce & 0xF] = Znonce; }
 #ifdef DOLOOPS
   }
 #endif
