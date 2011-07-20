@@ -601,6 +601,7 @@ class DiabloMiner {
     final SendWorkAsync sendWorkAsync = this.new SendWorkAsync();
     LongPollAsync longPollAsync = null;
     boolean rollNTime;
+    int rollNTimeExpire = 60;
 
     NetworkState(URL url, String userPass, int index) {
       this.queryUrl = url;
@@ -677,9 +678,17 @@ class DiabloMiner {
         if(!rollNTime) {
           String xRollNTime = connection.getHeaderField("X-Roll-NTime");
 
-          if("y".equalsIgnoreCase(xRollNTime)) {
+          if(!"n".equalsIgnoreCase(xRollNTime)) {
             rollNTime = true;
-            debug(queryUrl.getHost() + ": Enabling roll ntime support");
+	    String msg = queryUrl.getHost() + ": Enabling roll ntime support";
+            if(xRollNTime.startsWith("expire=")) {
+	      try {
+		rollNTimeExpire = Integer.parseInt(xRollNTime.substring(7));
+		msg += ", expire=" + rollNTimeExpire;
+	      } catch (NumberFormatException ex) {
+	      }
+	    }
+            debug(msg);
           }
         }
 
@@ -1384,7 +1393,7 @@ class DiabloMiner {
               data[17] = Integer.reverseBytes(Integer.reverseBytes(data[17]) + 1);
               rolledNTime++;
 
-              if(rolledNTime < 60) {
+              if(rolledNTime < networkState.rollNTimeExpire) {
                 debug("Deferring getwork update due to nonce saturation");
               } else {
                 debug("Forcing getwork update due to nonce saturation");
