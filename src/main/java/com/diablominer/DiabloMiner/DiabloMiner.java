@@ -680,15 +680,14 @@ class DiabloMiner {
 
           if(!"n".equalsIgnoreCase(xRollNTime)) {
             rollNTime = true;
-	    String msg = queryUrl.getHost() + ": Enabling roll ntime support";
+
             if(xRollNTime.startsWith("expire=")) {
-	      try {
-		rollNTimeExpire = Integer.parseInt(xRollNTime.substring(7));
-		msg += ", expire=" + rollNTimeExpire;
-	      } catch (NumberFormatException ex) {
-	      }
-	    }
-            debug(msg);
+              try {
+                rollNTimeExpire = Integer.parseInt(xRollNTime.substring(7));
+              } catch (NumberFormatException ex) { }
+            }
+
+            debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + rollNTimeExpire + " seconds");
           }
         }
 
