@@ -678,7 +678,7 @@ class DiabloMiner {
         if(!rollNTime) {
           String xRollNTime = connection.getHeaderField("X-Roll-NTime");
 
-          if(!"n".equalsIgnoreCase(xRollNTime)) {
+          if(xRollNTime != null && !"n".equalsIgnoreCase(xRollNTime)) {
             rollNTime = true;
 
             if(xRollNTime.startsWith("expire=")) {
