@@ -638,6 +638,8 @@ class DiabloMiner {
       connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
       connection.setRequestProperty("Content-Type", "application/json");
       connection.setRequestProperty("Cache-Control", "no-cache");
+      connection.setRequestProperty("User-Agent", "DiabloMiner");
+      connection.setRequestProperty("X-Mining-Extensions", "longpoll rollntime switchto");
       connection.setDoOutput(true);
 
       OutputStream requestStream = connection.getOutputStream();
@@ -684,10 +686,18 @@ class DiabloMiner {
             if(xRollNTime.startsWith("expire=")) {
               try {
                 rollNTimeExpire = Integer.parseInt(xRollNTime.substring(7));
+                getWorkRefresh = rollNTimeExpire * 1000;
               } catch (NumberFormatException ex) { }
             }
 
             debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + rollNTimeExpire + " seconds");
+          }
+        } else {
+          String xRollNTime = connection.getHeaderField("X-Roll-NTime");
+
+          if(xRollNTime == null) {
+            rollNTime = false;
+            debug(queryUrl.getHost() + ": Disabling roll ntime support");
           }
         }
 
