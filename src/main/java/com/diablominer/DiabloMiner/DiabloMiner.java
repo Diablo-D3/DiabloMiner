@@ -931,15 +931,13 @@ class DiabloMiner {
           try {
             getWorkAsync.queueIncoming.set(doJSONRPC(true, getWorkMessage));
             debug(queryUrl.getHost() + ": Long poll returned");
+            forceUpdate();
           } catch(IOException e) {
             error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
+            try {
+              Thread.sleep(500);
+            } catch (InterruptedException f) {}
           }
-
-          forceUpdate();
-
-          try {
-            Thread.sleep(500);
-          } catch (InterruptedException e) {}
         }
       }
     }
