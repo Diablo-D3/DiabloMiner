@@ -647,8 +647,8 @@ class DiabloMiner {
         connection = (HttpURLConnection) url.openConnection(proxy);
 
       if(longPoll) {
-        connection.setConnectTimeout(15 * 60 * 1000);
-        connection.setReadTimeout(15 * 60 * 1000);
+        connection.setConnectTimeout(5 * 60 * 1000);
+        connection.setReadTimeout(5 * 60 * 1000);
       } else {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(15000);
