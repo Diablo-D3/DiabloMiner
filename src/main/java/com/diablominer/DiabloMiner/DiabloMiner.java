@@ -620,7 +620,7 @@ class DiabloMiner {
     LongPollAsync longPollAsync = null;
     int refresh;
     boolean rollNTime;
-    int rollNTimeExpire = 60;
+    int rollNTimeExpire = 0;
 
     NetworkState(URL url, String userPass, int index) {
       this.queryUrl = url;
@@ -647,8 +647,8 @@ class DiabloMiner {
         connection = (HttpURLConnection) url.openConnection(proxy);
 
       if(longPoll) {
-        connection.setConnectTimeout(5 * 60 * 1000);
-        connection.setReadTimeout(5 * 60 * 1000);
+        connection.setConnectTimeout(10 * 60 * 1000);
+        connection.setReadTimeout(10 * 60 * 1000);
       } else {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(15000);
@@ -704,12 +704,15 @@ class DiabloMiner {
             if(xRollNTime != null && !"n".equalsIgnoreCase(xRollNTime)) {
               rollNTime = true;
 
+              rollNTimeExpire = 60;
+
               if(xRollNTime.startsWith("expire=")) {
                 try {
                   rollNTimeExpire = Integer.parseInt(xRollNTime.substring(7));
-                  refresh = rollNTimeExpire * 1000;
                 } catch (NumberFormatException ex) { }
               }
+
+              refresh = rollNTimeExpire * 1000;
 
               debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + rollNTimeExpire + " seconds");
             }
@@ -718,6 +721,7 @@ class DiabloMiner {
 
             if(xRollNTime == null) {
               rollNTime = false;
+              rollNTimeExpire = 0;
 
               if(longPoll)
                 refresh = 60000;
@@ -879,10 +883,12 @@ class DiabloMiner {
 
             if(queueIncoming.get() != null) {
               getWorkParser.getWorkIncoming.set(queueIncoming.getAndSet(null));
+              getWorkParser.rollNTime = rollNTime;
               getWorkParser = null;
             } else {
               try {
                 getWorkParser.getWorkIncoming.set(doJSONRPC(false, false, getWorkMessage));
+                getWorkParser.rollNTime = rollNTime;
                 getWorkParser = null;
               } catch (IOException e) {
                 error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
@@ -935,6 +941,10 @@ class DiabloMiner {
                   info(queryUrl.getHost() + " accepted block " + currentBlocks.incrementAndGet() + " from " + sendWorkItem.deviceName);
                 } else {
                   info(queryUrl.getHost() + " rejected block " + currentRejects.incrementAndGet() + " from " + sendWorkItem.deviceName);
+                  edebug("Rejected share " + (float)((getNow() - sendWorkItem.getWork.lastPulled) / 1000.0) +
+                        " seconds old, roll ntime set to " + sendWorkItem.getWork.rollNTime + ", rolled " +
+                        sendWorkItem.getWork.rolledNTime + " times");
+                  sendWorkItem.getWork.networkState.getWorkAsync.add(sendWorkItem.getWork);
                 }
 
                 sendWorkItem = null;
@@ -958,17 +968,19 @@ class DiabloMiner {
         }
       }
 
-      void add(ObjectNode json, String deviceName) {
-        sendWorkQueue.add(new SendWorkItem(json, deviceName));
+      void add(ObjectNode json, String deviceName, GetWorkParser getWork) {
+        sendWorkQueue.add(new SendWorkItem(json, deviceName, getWork));
       }
 
       class SendWorkItem {
         ObjectNode message;
         String deviceName;
+        GetWorkParser getWork;
 
-        SendWorkItem(ObjectNode message, String deviceName) {
+        SendWorkItem(ObjectNode message, String deviceName, GetWorkParser getWork) {
           this.message = message;
           this.deviceName = deviceName;
+          this.getWork = getWork;
         }
       }
     }
@@ -1089,7 +1101,7 @@ class DiabloMiner {
       }
 
       if(hasBitAlign) {
-        info("BFI_INT patching enabled, disabling hardware checking");
+        info("BFI_INT patching enabled, disabling hardware check errors");
         hwcheck = false;
 
         int binarySize = (int)program.getInfoSizeArray(CL10.CL_PROGRAM_BINARY_SIZES)[0];
@@ -1429,6 +1441,7 @@ class DiabloMiner {
 
         long lastPulled = 0;
         long base = 0;
+        boolean rollNTime = false;
         int rolledNTime = 0;
 
         NetworkState networkState = networkStates[(int) (networkStatesCount * Math.random())];
@@ -1459,7 +1472,7 @@ class DiabloMiner {
 
         void getWork(boolean nonceSaturation) {
           if(nonceSaturation) {
-            if(networkState.rollNTime) {
+            if(rollNTime && networkState.rollNTime) {
               base = 0;
               data[17] = Integer.reverseBytes(Integer.reverseBytes(data[17]) + 1);
               rolledNTime++;
@@ -1497,7 +1510,7 @@ class DiabloMiner {
           params.add(encodeBlock());
           sendWorkMessage.put("id", 1);
 
-          networkState.sendWorkAsync.add(sendWorkMessage, deviceName);
+          networkState.sendWorkAsync.add(sendWorkMessage, deviceName, this);
         }
 
         void parse(JsonNode responseMessage) {
