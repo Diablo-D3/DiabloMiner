@@ -84,10 +84,14 @@ class DiabloMiner {
   final static int OUTPUTS = 16;
   final static long TWO32 = 4294967295L;
   final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];
+  final static int RANDOM = 0;
+  final static int ROUND_ROBIN = 1;
+  final static int FALLBACK = 2;
 
   NetworkState[] networkStates;
   int networkStatesCount;
   int networkStateIndex = 0;
+  int networkScheduler = RANDOM;
   Proxy proxy = null;
   int getWorkRefresh = 5000;
   final ObjectMapper mapper = new ObjectMapper();
@@ -155,6 +159,7 @@ class DiabloMiner {
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true, "bitcoin host port");
+    options.addOption("s", "scheduler", true, "bitcoin host scheduler");
     options.addOption("g", "getWork", true, "seconds between getWork refresh");
     options.addOption("D", "devices", true, "devices to enable");
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
@@ -279,6 +284,14 @@ class DiabloMiner {
 
     if(line.hasOption("port"))
       splitPort = line.getOptionValue("port").split(",");
+
+    if(line.hasOption("scheduler")) {
+      String sched = line.getOptionValue("scheduler");
+      if(sched.equalsIgnoreCase("round-robin"))
+        networkScheduler = ROUND_ROBIN;
+      else if(sched.equalsIgnoreCase("fallback"))
+        networkScheduler = FALLBACK;
+    }
 
     networkStatesCount = 0;
 
@@ -1470,7 +1483,16 @@ class DiabloMiner {
         AtomicReference<GetWorkItem> getWorkIncoming = new AtomicReference<GetWorkItem>(null);
 
         GetWorkParser() {
-	  networkState = networkStates[(networkStateIndex++) % networkStatesCount];
+	  switch (networkScheduler) {
+	    case FALLBACK:
+	      networkState = networkStates[0];
+	      break;
+	    case ROUND_ROBIN:
+	      networkState = networkStates[(networkStateIndex++) % networkStatesCount];
+	      break;
+	    default:
+	      networkState = networkStates[(int) (networkStatesCount * Math.random())];
+	  }
           getWork(false);
         }
 
