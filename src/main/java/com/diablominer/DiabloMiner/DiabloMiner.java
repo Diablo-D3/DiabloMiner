@@ -86,7 +86,7 @@ class DiabloMiner {
   final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];
   final static int RANDOM = 0;
   final static int ROUND_ROBIN = 1;
-  final static int FALLBACK = 2;
+  final static int FAILOVER = 2;
 
   NetworkState[] networkStates;
   int networkStatesCount;
@@ -289,8 +289,8 @@ class DiabloMiner {
       String sched = line.getOptionValue("scheduler");
       if(sched.equalsIgnoreCase("round-robin"))
         networkScheduler = ROUND_ROBIN;
-      else if(sched.equalsIgnoreCase("fallback"))
-        networkScheduler = FALLBACK;
+      else if(sched.equalsIgnoreCase("failover"))
+        networkScheduler = FAILOVER;
     }
 
     networkStatesCount = 0;
@@ -1484,7 +1484,7 @@ class DiabloMiner {
 
         GetWorkParser() {
 	  switch (networkScheduler) {
-	    case FALLBACK:
+	    case FAILOVER:
 	      networkState = networkStates[0];
 	      break;
 	    case ROUND_ROBIN:
