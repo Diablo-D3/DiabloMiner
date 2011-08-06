@@ -74,6 +74,7 @@ import org.lwjgl.opencl.CLProgram;
 
 import com.diablominer.DiabloMiner.DiabloMiner.DeviceState.ExecutionState;
 import com.diablominer.DiabloMiner.DiabloMiner.DeviceState.ExecutionState.GetWorkParser;
+import com.diablominer.DiabloMiner.DiabloMiner.NetworkState.GetWorkItem;
 
 class DiabloMiner {
   final static int EXECUTION_TOTAL = 2;
@@ -545,17 +546,6 @@ class DiabloMiner {
     }
   }
 
-  void forceUpdate() {
-    ExecutionState[] executions;
-
-    for(int i = 0; i < deviceStatesCount; i++) {
-      executions = deviceStates.get(i).executions;
-      for(int j = 0; j < EXECUTION_TOTAL; j++)
-        if(executions[j].currentWork != null)
-          executions[j].currentWork.lastPulled = 0;
-    }
-  }
-
   static int rot(int x, int y) {
     return (x >>> y) | (x << (32 - y));
   }
@@ -620,7 +610,6 @@ class DiabloMiner {
     LongPollAsync longPollAsync = null;
     int refresh;
     boolean rollNTime;
-    int rollNTimeExpire = 0;
 
     NetworkState(URL url, String userPass, int index) {
       this.queryUrl = url;
@@ -704,24 +693,19 @@ class DiabloMiner {
             if(xRollNTime != null && !"n".equalsIgnoreCase(xRollNTime)) {
               rollNTime = true;
 
-              rollNTimeExpire = 60;
-
               if(xRollNTime.startsWith("expire=")) {
                 try {
-                  rollNTimeExpire = Integer.parseInt(xRollNTime.substring(7));
+                  refresh = Integer.parseInt(xRollNTime.substring(7))  * 1000;
                 } catch (NumberFormatException ex) { }
               }
 
-              refresh = rollNTimeExpire * 1000;
-
-              debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + rollNTimeExpire + " seconds");
+              debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + (refresh / 1000) + " seconds");
             }
           } else {
             String xRollNTime = connection.getHeaderField("X-Roll-NTime");
 
             if(xRollNTime == null) {
               rollNTime = false;
-              rollNTimeExpire = 0;
 
               if(longPoll)
                 refresh = 60000;
@@ -747,6 +731,12 @@ class DiabloMiner {
                   newHost.get("port").getIntValue(), longPollUrl.getPath());
 
           info(oldHost + ": Switched to " + queryUrl.getHost());
+        }
+
+        String xRejectReason = connection.getHeaderField("X-Reject-Reason");
+
+        if(xRejectReason != null && !"".equals(xRejectReason)) {
+          debug("Rejected block because: " + xRejectReason);
         }
 
         if(connection.getContentEncoding() != null) {
@@ -862,9 +852,45 @@ class DiabloMiner {
       return result;
     }
 
+    void forceUpdate() {
+      ExecutionState[] executions;
+
+      for(int i = 0; i < deviceStatesCount; i++) {
+        executions = deviceStates.get(i).executions;
+        for(int j = 0; j < EXECUTION_TOTAL; j++) {
+          GetWorkParser getWorkParser = executions[j].currentWork;
+          if(getWorkParser != null && this.equals(getWorkParser.networkState))
+            getWorkParser.lastPulled = 0;
+        }
+      }
+    }
+
+    class GetWorkItem {
+      JsonNode json;
+      boolean rollNtime;
+      long pulled = getNow();
+
+      GetWorkItem(JsonNode json, boolean rollNTime) {
+        this.json = json;
+        this.rollNtime = rollNTime;
+      }
+    }
+
+    class SendWorkItem {
+      ObjectNode message;
+      String deviceName;
+      GetWorkParser getWork;
+
+      SendWorkItem(ObjectNode message, String deviceName, GetWorkParser getWork) {
+        this.message = message;
+        this.deviceName = deviceName;
+        this.getWork = getWork;
+      }
+    }
+
     class GetWorkAsync implements Runnable {
       LinkedBlockingDeque<GetWorkParser> getWorkQueue = new LinkedBlockingDeque<GetWorkParser>();
-      AtomicReference<JsonNode> queueIncoming = new AtomicReference<JsonNode>(null);
+      AtomicReference<GetWorkItem> queueIncoming = new AtomicReference<GetWorkItem>(null);
 
       public void run() {
         while(running) {
@@ -873,7 +899,8 @@ class DiabloMiner {
 
             if(queueIncoming.get() == null) {
               try {
-                queueIncoming.compareAndSet(null, doJSONRPC(false, false, getWorkMessage));
+                GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
+                queueIncoming.compareAndSet(null, getWorkItem);
               } catch (IOException e) {}
             }
 
@@ -882,14 +909,18 @@ class DiabloMiner {
             } catch (InterruptedException e) { }
 
             if(queueIncoming.get() != null) {
-              getWorkParser.getWorkIncoming.set(queueIncoming.getAndSet(null));
-              getWorkParser.rollNTime = rollNTime;
-              getWorkParser = null;
+              GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
+
+              if(getWorkItem.pulled + refresh > getNow()) {
+                getWorkParser.getWorkIncoming.set(getWorkItem);
+              } else {
+                getWorkQueue.push(getWorkParser);
+              }
             } else {
               try {
-                getWorkParser.getWorkIncoming.set(doJSONRPC(false, false, getWorkMessage));
+                GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
+                getWorkParser.getWorkIncoming.set(getWorkItem);
                 getWorkParser.rollNTime = rollNTime;
-                getWorkParser = null;
               } catch (IOException e) {
                 error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
 
@@ -899,7 +930,6 @@ class DiabloMiner {
                   getWorkParser.networkState = networkStates[0];
 
                 getWorkParser.networkState.getWorkAsync.add(getWorkParser);
-                getWorkParser = null;
 
                 try {
                   Thread.sleep(500);
@@ -941,7 +971,7 @@ class DiabloMiner {
                   info(queryUrl.getHost() + " accepted block " + currentBlocks.incrementAndGet() + " from " + sendWorkItem.deviceName);
                 } else {
                   info(queryUrl.getHost() + " rejected block " + currentRejects.incrementAndGet() + " from " + sendWorkItem.deviceName);
-                  edebug("Rejected share " + (float)((getNow() - sendWorkItem.getWork.lastPulled) / 1000.0) +
+                  edebug("Rejected block " + (float)((getNow() - sendWorkItem.getWork.lastPulled) / 1000.0) +
                         " seconds old, roll ntime set to " + sendWorkItem.getWork.rollNTime + ", rolled " +
                         sendWorkItem.getWork.rolledNTime + " times");
                   sendWorkItem.getWork.networkState.getWorkAsync.add(sendWorkItem.getWork);
@@ -971,18 +1001,6 @@ class DiabloMiner {
       void add(ObjectNode json, String deviceName, GetWorkParser getWork) {
         sendWorkQueue.add(new SendWorkItem(json, deviceName, getWork));
       }
-
-      class SendWorkItem {
-        ObjectNode message;
-        String deviceName;
-        GetWorkParser getWork;
-
-        SendWorkItem(ObjectNode message, String deviceName, GetWorkParser getWork) {
-          this.message = message;
-          this.deviceName = deviceName;
-          this.getWork = getWork;
-        }
-      }
     }
 
     class LongPollAsync implements Runnable {
@@ -990,7 +1008,8 @@ class DiabloMiner {
         while(running) {
           try {
             try {
-              getWorkAsync.queueIncoming.set(doJSONRPC(true, false, getWorkMessage));
+              GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(true, false, getWorkMessage), rollNTime);
+              getWorkAsync.queueIncoming.set(getWorkItem);
               debug(queryUrl.getHost() + ": Long poll returned");
             } catch(IOException e) {
               error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
@@ -1341,7 +1360,7 @@ class DiabloMiner {
               if(submittedBlock) {
                 if(currentWork.networkState.longPollAsync == null) {
                   edebug("Forcing getwork update due to block submission");
-                  forceUpdate();
+                  currentWork.networkState.forceUpdate();
                 }
               }
             }
@@ -1445,7 +1464,7 @@ class DiabloMiner {
         int rolledNTime = 0;
 
         NetworkState networkState = networkStates[(int) (networkStatesCount * Math.random())];
-        AtomicReference<JsonNode> getWorkIncoming = new AtomicReference<JsonNode>(null);
+        AtomicReference<GetWorkItem> getWorkIncoming = new AtomicReference<GetWorkItem>(null);
 
         GetWorkParser() {
           getWork(false);
@@ -1462,10 +1481,11 @@ class DiabloMiner {
         }
 
         void recieveWork() {
-          JsonNode json = getWorkIncoming.getAndSet(null);
+          GetWorkItem workItem = getWorkIncoming.getAndSet(null);
 
-          parse(json);
-          lastPulled = getNow();
+          parse(workItem.json);
+          lastPulled = workItem.pulled;
+          rollNTime = workItem.rollNtime;
           base = 0;
           rolledNTime = 0;
         }
@@ -1477,7 +1497,7 @@ class DiabloMiner {
               data[17] = Integer.reverseBytes(Integer.reverseBytes(data[17]) + 1);
               rolledNTime++;
 
-              if(rolledNTime < networkState.rollNTimeExpire) {
+              if(rolledNTime < networkState.refresh / 1000) {
                 debug("Deferring getwork update due to nonce saturation");
               } else {
                 debug("Forcing getwork update due to nonce saturation");
