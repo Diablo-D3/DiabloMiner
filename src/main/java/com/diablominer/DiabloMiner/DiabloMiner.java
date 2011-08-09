@@ -39,9 +39,11 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Formatter;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPInputStream;
@@ -108,8 +110,8 @@ class DiabloMiner {
 
   String source;
 
-  boolean running = true;
-  Thread mainThread;
+  AtomicBoolean running = new AtomicBoolean(true);
+  List<Thread> threads = new ArrayList<Thread>();
 
   List<DeviceState> deviceStates = new ArrayList<DeviceState>();
   int deviceStatesCount;
@@ -131,11 +133,15 @@ class DiabloMiner {
   public static void main(String [] args) throws Exception {
     DiabloMiner diabloMiner = new DiabloMiner();
 
-    diabloMiner.execute(args);
+    try {
+      diabloMiner.execute(args);
+    } catch (DiabloMinerFatalException e) {
+      System.exit(-1);
+    }
   }
 
   void execute(String[] args) throws Exception {
-    mainThread = Thread.currentThread();
+    threads.add(Thread.currentThread());
 
     getWorkMessage.put("method", "getwork");
     getWorkMessage.putArray("params");
@@ -175,7 +181,7 @@ class DiabloMiner {
       formatter.printHelp("DiabloMiner -u myuser -p mypassword [args]\n", "", options,
           "\nRemember to set rpcuser and rpcpassword in your ~/.bitcoin/bitcoin.conf " +
           "before starting bitcoind or bitcoin --daemon");
-      System.exit(0);
+      return;
     }
 
     if(line.hasOption("fps"))
@@ -352,7 +358,10 @@ class DiabloMiner {
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
     byte[] data = new byte[64 * 1024];
-    stream.read(data);
+
+    if(stream.read(data) < 1)
+      throw new DiabloMinerFatalException("Unable to read DiabloMiner.cl");
+
     source = new String(data).trim();
     stream.close();
 
@@ -420,19 +429,18 @@ class DiabloMiner {
 
     if(line.hasOption("ds")) {
       System.out.println("\n---\n" + source);
-      System.exit(0);
+      return;
     }
 
     targetFPSBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
     maxWorkSize = TWO32 / zloops / vectors;
 
-
     info("Started");
 
-    String list = networkStates[0].queryUrl.toString();
+    StringBuilder list = new StringBuilder(networkStates[0].queryUrl.toString());
 
     for(int i = 1; i < networkStatesCount; i++)
-      list += ", " + networkStates[i].queryUrl;
+      list.append(", " + networkStates[i].queryUrl);
 
     info("Connecting to: " + list);
 
@@ -443,14 +451,11 @@ class DiabloMiner {
 
       platforms = CLPlatform.getPlatforms();
     } catch (Exception e) {
-      error("Failed to initialize OpenCL, make sure your environment is setup correctly");
-      System.exit(-1);
+      throw new DiabloMinerFatalException("Failed to initialize OpenCL, make sure your environment is setup correctly");
     }
 
-    if(platforms == null || platforms.isEmpty()) {
-      error("No OpenCL platforms found");
-      System.exit(-1);
-    }
+    if(platforms == null || platforms.isEmpty())
+      throw new DiabloMinerFatalException("No OpenCL platforms found");
 
     int count = 1;
     int platformCount = 0;
@@ -461,10 +466,8 @@ class DiabloMiner {
 
       List<CLDevice> devices = platform.getDevices(CL10.CL_DEVICE_TYPE_GPU | CL10.CL_DEVICE_TYPE_ACCELERATOR);
 
-      if(devices == null) {
+      if(devices == null || devices.isEmpty())
         error("OpenCL platform " + platform.getInfoString(CL10.CL_PLATFORM_NAME).trim() + " contains no devices");
-        System.exit(-1);
-      }
 
       for (CLDevice device : devices) {
         if(enabledDevices == null || enabledDevices.contains(platformCount + "." + count) || enabledDevices.contains(Integer.toString(count)))
@@ -478,71 +481,67 @@ class DiabloMiner {
 
     deviceStatesCount = deviceStates.size();
 
+    if(deviceStatesCount == 0)
+      throw new DiabloMinerFatalException("No OpenCL devices found");
+
     long previousHashCount = 0;
-    long previousAdjustedHashCount = 0;
+    double previousAdjustedHashCount = 0.0;
     long previousAdjustedStartTime = startTime = (getNow()) - 1;
     StringBuilder hashMeter = new StringBuilder(80);
     Formatter hashMeterFormatter = new Formatter(hashMeter);
 
-    while(running) {
-      try {
-        for(int i = 0; i < deviceStatesCount; i++)
-          deviceStates.get(i).checkDevice();
+    while(running.get()) {
+      for(int i = 0; i < deviceStatesCount; i++)
+        deviceStates.get(i).checkDevice();
 
-        long now = getNow();
-        long currentHashCount = hashCount.get();
-        long adjustedHashCount = (currentHashCount - previousHashCount) / (now - previousAdjustedStartTime);
-        double hashLongCount = currentHashCount / (now - startTime) / 1000.0;
+      long now = getNow();
+      long currentHashCount = hashCount.get();
+      double adjustedHashCount = (double)(currentHashCount - previousHashCount) / (double)(now - previousAdjustedStartTime);
+      double hashLongCount = (double)currentHashCount / (double)(now - startTime) / 1000.0;
 
-        if(now - startTime > TIME_OFFSET * 2) {
-          double averageHashCount = (adjustedHashCount + previousAdjustedHashCount) / 2 / 1000.0;
+      if(now - startTime > TIME_OFFSET * 2) {
+        double averageHashCount = (double)(adjustedHashCount + previousAdjustedHashCount) / 2.0 / 1000.0;
 
-          hashMeter.setLength(0);
+        hashMeter.setLength(0);
 
-          if(!debug) {
-            hashMeterFormatter.format("\rmhash: %.1f/%.1f | accept: %d | reject: %d | hw error: %d",
-                  averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
-          } else {
-            hashMeterFormatter.format("\rmhash: %.1f/%.1f | a/r/hwe: %d/%d/%d | ghash: ",
-                  averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
+        if(!debug) {
+          hashMeterFormatter.format("\rmhash: %.1f/%.1f | accept: %d | reject: %d | hw error: %d",
+                averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
+        } else {
+          hashMeterFormatter.format("\rmhash: %.1f/%.1f | a/r/hwe: %d/%d/%d | ghash: ",
+                averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
 
-            double basisAverage = 0.0;
+          double basisAverage = 0.0;
 
-            for(int i = 0; i < deviceStates.size(); i++) {
-              DeviceState deviceState = deviceStates.get(i);
+          for(int i = 0; i < deviceStates.size(); i++) {
+            DeviceState deviceState = deviceStates.get(i);
 
-              hashMeterFormatter.format("%.1f ", deviceState.deviceHashCount.get() / 1000.0 / 1000.0 / 1000.0);
-              basisAverage += deviceState.basis;
-            }
-
-            basisAverage = 1000 / (basisAverage / deviceStates.size() * EXECUTION_TOTAL);
-
-            hashMeterFormatter.format("| fps: %.1f", basisAverage);
+            hashMeterFormatter.format("%.1f ", deviceState.deviceHashCount.get() / 1000.0 / 1000.0 / 1000.0);
+            basisAverage += deviceState.basis;
           }
 
-          System.out.print(hashMeter);
-        } else {
-          System.out.print("\rWaiting...");
+          basisAverage = 1000 / (basisAverage / deviceStates.size() * EXECUTION_TOTAL);
+
+          hashMeterFormatter.format("| fps: %.1f", basisAverage);
         }
 
-        if(getNow() - TIME_OFFSET * 2 > previousAdjustedStartTime) {
-          previousHashCount = currentHashCount;
-          previousAdjustedHashCount = adjustedHashCount;
-          previousAdjustedStartTime = now - 1;
-        }
-
-        try {
-          if(now - startTime > TIME_OFFSET)
-            Thread.sleep(1000);
-          else
-            Thread.sleep(1);
-        } catch (InterruptedException e) { }
-      } catch (Exception e) {
-        running = false;
-        error("Uncaught exception");
-        e.printStackTrace();
-        System.exit(-1);
+        System.out.print(hashMeter);
+      } else {
+        System.out.print("\rWaiting...");
       }
+
+      if(getNow() - TIME_OFFSET * 2 > previousAdjustedStartTime) {
+        previousHashCount = currentHashCount;
+        previousAdjustedHashCount = adjustedHashCount;
+        previousAdjustedStartTime = now - 1;
+      }
+
+      try {
+        if(now - startTime > TIME_OFFSET)
+          Thread.sleep(1000);
+        else
+          Thread.sleep(1);
+      } catch (InterruptedException e) { }
     }
   }
 
@@ -571,32 +570,49 @@ class DiabloMiner {
     return "[" + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(new Date()) + "]";
   }
 
+  long getNow() {
+    return System.nanoTime() / 1000000;
+  }
+
   void info(String msg) {
     System.out.println("\r" + CLEAR + "\r" + getDateTime() + " " + msg);
-    mainThread.interrupt();
+    threads.get(0).interrupt();
   }
 
   void debug(String msg) {
     if(debug) {
       System.out.println("\r" + CLEAR + "\r" + getDateTime() + " DEBUG: " + msg);
-      mainThread.interrupt();
+      threads.get(0).interrupt();
     }
   }
 
   void edebug(String msg) {
     if(edebug) {
       System.out.println("\r" + CLEAR + "\r" + getDateTime() + " DEBUG: " + msg);
-      mainThread.interrupt();
+      threads.get(0).interrupt();
     }
   }
 
   void error(String msg) {
     System.err.println("\r" + CLEAR + "\r" + getDateTime() + " ERROR: " + msg);
-    mainThread.interrupt();
+    threads.get(0).interrupt();
   }
 
-  long getNow() {
-    return System.nanoTime() / 1000000;
+
+  class DiabloMinerFatalException extends Exception {
+    public DiabloMinerFatalException(String reason) {
+      super(reason);
+      error(reason);
+      running.set(false);
+
+      for(int i = 0; i < threads.size(); i++) {
+        Thread thread = threads.get(i);
+        if(thread != Thread.currentThread())
+          thread.interrupt();
+      }
+    }
+
+    private static final long serialVersionUID = -9022549833049053386L;
   }
 
   class NetworkState {
@@ -617,8 +633,13 @@ class DiabloMiner {
       this.index = index;
       this.refresh = getWorkRefresh;
 
-      new Thread(getWorkAsync, "DiabloMiner GetWorkAsync for " + url.getHost()).start();
-      new Thread(sendWorkAsync, "DiabloMiner SendWorkAsync for " + url.getHost()).start();
+      Thread thread = new Thread(getWorkAsync, "DiabloMiner GetWorkAsync for " + url.getHost());
+      thread.start();
+      threads.add(thread);
+
+      thread = new Thread(sendWorkAsync, "DiabloMiner SendWorkAsync for " + url.getHost());
+      thread.start();
+      threads.add(thread);
     }
 
     JsonNode doJSONRPC(boolean longPoll, boolean sendWork, ObjectNode requestMessage) throws IOException {
@@ -678,7 +699,9 @@ class DiabloMiner {
 
               if(longPollAsync == null) {
                 longPollAsync = new LongPollAsync();
-                new Thread(longPollAsync, "DiabloMiner LongPollAsync for " + url.getHost()).start();
+                Thread thread = new Thread(longPollAsync, "DiabloMiner LongPollAsync for " + url.getHost());
+                thread.start();
+                threads.add(thread);
 
                 refresh = 60000;
 
@@ -783,7 +806,10 @@ class DiabloMiner {
               + connection.getResponseCode() + " " + connection.getResponseMessage());
 
         byte[] errorbuf = new byte[8192];
-        errorStream.read(errorbuf);
+
+        if(errorStream.read(errorbuf) < 1)
+          throw new IOException("Bitcoin returned an error, but with no message");
+
         String error = new String(errorbuf).trim();
 
         if(error.startsWith("{")) {
@@ -893,54 +919,49 @@ class DiabloMiner {
       AtomicReference<GetWorkItem> queueIncoming = new AtomicReference<GetWorkItem>(null);
 
       public void run() {
-        while(running) {
-          try {
-            GetWorkParser getWorkParser = null;
+        while(running.get()) {
+          GetWorkParser getWorkParser = null;
 
-            if(queueIncoming.get() == null) {
-              try {
-                GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
-                queueIncoming.compareAndSet(null, getWorkItem);
-              } catch (IOException e) {}
-            }
-
+          if(queueIncoming.get() == null) {
             try {
-              getWorkParser = getWorkQueue.take();
-            } catch (InterruptedException e) { }
+              GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
+              queueIncoming.compareAndSet(null, getWorkItem);
+            } catch (IOException e) {}
+          }
 
-            if(queueIncoming.get() != null) {
-              GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
+          try {
+            getWorkParser = getWorkQueue.take();
+          } catch (InterruptedException e) {
+            continue;
+          }
 
-              if(getWorkItem.pulled + refresh > getNow()) {
-                getWorkParser.getWorkIncoming.set(getWorkItem);
-              } else {
-                getWorkQueue.push(getWorkParser);
-              }
+          if(queueIncoming.get() != null) {
+            GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
+
+            if(getWorkItem.pulled + refresh > getNow()) {
+              getWorkParser.getWorkIncoming.set(getWorkItem);
             } else {
-              try {
-                GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
-                getWorkParser.getWorkIncoming.set(getWorkItem);
-                getWorkParser.rollNTime = rollNTime;
-              } catch (IOException e) {
-                error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
-
-                if(getWorkParser.networkState.index < networkStatesCount - 1)
-                  getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
-                else
-                  getWorkParser.networkState = networkStates[0];
-
-                getWorkParser.networkState.getWorkAsync.add(getWorkParser);
-
-                try {
-                  Thread.sleep(500);
-                } catch (InterruptedException e1) { }
-              }
+              getWorkQueue.push(getWorkParser);
             }
-          } catch (Exception e) {
-            running = false;
-            error("Uncaught exception");
-            e.printStackTrace();
-            System.exit(-1);
+          } else {
+            try {
+              GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
+              getWorkParser.getWorkIncoming.set(getWorkItem);
+              getWorkParser.rollNTime = rollNTime;
+            } catch (IOException e) {
+              error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
+
+              if(getWorkParser.networkState.index < networkStatesCount - 1)
+                getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
+              else
+                getWorkParser.networkState = networkStates[0];
+
+              getWorkParser.networkState.getWorkAsync.add(getWorkParser);
+
+              try {
+                Thread.sleep(500);
+              } catch (InterruptedException e1) { }
+            }
           }
         }
       }
@@ -954,46 +975,41 @@ class DiabloMiner {
       LinkedBlockingDeque<SendWorkItem> sendWorkQueue = new LinkedBlockingDeque<SendWorkItem>();
 
       public void run() {
-        while(running) {
+        while(running.get()) {
+          SendWorkItem sendWorkItem = null;
+          boolean error = false;
+
           try {
-            SendWorkItem sendWorkItem = null;
-            boolean error = false;
+            sendWorkItem = sendWorkQueue.take();
+          } catch (InterruptedException e) {
+            continue;
+          }
 
+          while(sendWorkItem != null) {
             try {
-              sendWorkItem = sendWorkQueue.take();
-            } catch (InterruptedException e) { }
+              boolean accepted = doJSONRPC(false, true, sendWorkItem.message).getBooleanValue();
 
-            while(sendWorkItem != null) {
-              try {
-                boolean accepted = doJSONRPC(false, true, sendWorkItem.message).getBooleanValue();
-
-                if(accepted) {
-                  info(queryUrl.getHost() + " accepted block " + currentBlocks.incrementAndGet() + " from " + sendWorkItem.deviceName);
-                } else {
-                  info(queryUrl.getHost() + " rejected block " + currentRejects.incrementAndGet() + " from " + sendWorkItem.deviceName);
-                  edebug("Rejected block " + (float)((getNow() - sendWorkItem.getWork.lastPulled) / 1000.0) +
-                        " seconds old, roll ntime set to " + sendWorkItem.getWork.rollNTime + ", rolled " +
-                        sendWorkItem.getWork.rolledNTime + " times");
-                  sendWorkItem.getWork.networkState.getWorkAsync.add(sendWorkItem.getWork);
-                }
-
-                sendWorkItem = null;
-              } catch (IOException e) {
-                if(!error) {
-                  error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
-                  error = true;
-                }
-
-                try {
-                  Thread.sleep(500);
-                } catch (InterruptedException e1) { }
+              if(accepted) {
+                info(queryUrl.getHost() + " accepted block " + currentBlocks.incrementAndGet() + " from " + sendWorkItem.deviceName);
+              } else {
+                info(queryUrl.getHost() + " rejected block " + currentRejects.incrementAndGet() + " from " + sendWorkItem.deviceName);
+                edebug("Rejected block " + (float)((getNow() - sendWorkItem.getWork.lastPulled) / 1000.0) +
+                      " seconds old, roll ntime set to " + sendWorkItem.getWork.rollNTime + ", rolled " +
+                      sendWorkItem.getWork.rolledNTime + " times");
+                sendWorkItem.getWork.networkState.getWorkAsync.add(sendWorkItem.getWork);
               }
+
+              sendWorkItem = null;
+            } catch (IOException e) {
+              if(!error) {
+                error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
+                error = true;
+              }
+
+              try {
+                Thread.sleep(500);
+              } catch (InterruptedException e1) { }
             }
-          } catch (Exception e) {
-            running = false;
-            error("Uncaught exception");
-            e.printStackTrace();
-            System.exit(-1);
           }
         }
       }
@@ -1005,27 +1021,20 @@ class DiabloMiner {
 
     class LongPollAsync implements Runnable {
       public void run() {
-        while(running) {
+        while(running.get()) {
           try {
-            try {
-              GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(true, false, getWorkMessage), rollNTime);
-              getWorkAsync.queueIncoming.set(getWorkItem);
-              debug(queryUrl.getHost() + ": Long poll returned");
-            } catch(IOException e) {
-              error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
-            }
-
-            forceUpdate();
-
-            try {
-              Thread.sleep(500);
-            } catch (InterruptedException e) {}
-          } catch (Exception e) {
-            running = false;
-            error("Uncaught exception");
-            e.printStackTrace();
-            System.exit(-1);
+            GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(true, false, getWorkMessage), rollNTime);
+            getWorkAsync.queueIncoming.set(getWorkItem);
+            debug(queryUrl.getHost() + ": Long poll returned");
+          } catch(IOException e) {
+            error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
           }
+
+          forceUpdate();
+
+          try {
+            Thread.sleep(500);
+          } catch (InterruptedException e) {}
         }
       }
     }
@@ -1037,7 +1046,6 @@ class DiabloMiner {
     final CLDevice device;
     final CLContext context;
 
-    CLProgram program;
     final CLKernel kernel;
 
     long workSize;
@@ -1054,10 +1062,12 @@ class DiabloMiner {
     long lastRuns = 0;
     long lastTime = startTime;
 
-    boolean hasBitAlign = false;
     int loops = 1;
 
     DeviceState(CLPlatform platform, CLDevice device, int count) throws Exception {
+      boolean hasBitAlign = false;
+      CLProgram program;
+
       this.device = device;
 
       PointerBuffer properties = BufferUtils.createPointerBuffer(3);
@@ -1115,8 +1125,7 @@ class DiabloMiner {
 
         System.out.println(new String(log));
 
-        error("Failed to build program on " + deviceName);
-        System.exit(-1);
+        throw new DiabloMinerFatalException("Failed to build program on " + deviceName);
       }
 
       if(hasBitAlign) {
@@ -1186,15 +1195,14 @@ class DiabloMiner {
         err = CL10.clBuildProgram(program, device, compileOptions, null);
 
         if(err != CL10.CL_SUCCESS) {
-          error("Failed to BFI_INT patch kernel on " + deviceName);
-          System.exit(-1);
+          throw new DiabloMinerFatalException("Failed to BFI_INT patch kernel on " + deviceName);
         }
       }
 
       kernel = CL10.clCreateKernel(program, "search", null);
       if(kernel == null) {
-        error("Failed to create kernel on " + deviceName);
-        System.exit(-1);
+        throw new DiabloMinerFatalException("Failed to create kernel on " + deviceName);
+
       }
 
       if(forceWorkSize == 0) {
@@ -1218,7 +1226,9 @@ class DiabloMiner {
 
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
-        new Thread(executions[i], "DiabloMiner Executor (" + deviceName + "/" + i + ")").start();
+        Thread thread = new Thread(executions[i], "DiabloMiner Executor (" + deviceName + "/" + i + ")");
+        thread.start();
+        threads.add(thread);
       }
     }
 
@@ -1271,12 +1281,11 @@ class DiabloMiner {
       final IntBuffer errBuf = BufferUtils.createIntBuffer(1);
       int err;
 
-      ExecutionState() throws NoSuchAlgorithmException {
+      ExecutionState() throws NoSuchAlgorithmException, DiabloMinerFatalException {
         queue = CL10.clCreateCommandQueue(context, device, 0, errBuf);
 
         if(queue == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-          error("Failed to allocate queue");
-          System.exit(-1);
+          throw new DiabloMinerFatalException("Failed to allocate queue");
         }
 
         buffer[0] = BufferUtils.createByteBuffer(4 * OUTPUTS);
@@ -1286,8 +1295,7 @@ class DiabloMiner {
           output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY, 4 * OUTPUTS, errBuf);
 
           if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
-            error("Failed to allocate output buffer");
-            System.exit(-1);
+            throw new DiabloMinerFatalException("Failed to allocate output buffer");
           }
 
           buffer[i].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
@@ -1304,148 +1312,142 @@ class DiabloMiner {
 
         currentWork = this.new GetWorkParser();
 
-        while(running) {
-          try {
-            submittedBlock = false;
-            resetBuffer = false;
+        while(running.get()) {
+          submittedBlock = false;
+          resetBuffer = false;
 
-            if(skip == false) {
-              for(int z = 0; z < OUTPUTS; z++) {
-                int nonce = buffer[bufferIndex].getInt(z * 4);
+          if(skip == false) {
+            for(int z = 0; z < OUTPUTS; z++) {
+              int nonce = buffer[bufferIndex].getInt(z * 4);
 
-                if(nonce != 0) {
-                  for(int j = 0; j < 19; j++)
-                    digestInput.putInt(j*4, currentWork.data[j]);
+              if(nonce != 0) {
+                for(int j = 0; j < 19; j++)
+                  digestInput.putInt(j*4, currentWork.data[j]);
 
-                  digestInput.putInt(19*4, nonce);
+                digestInput.putInt(19*4, nonce);
 
-                  digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
+                digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
 
-                  long G =
-                        ((long)(0xFF & digestOutput[27]) << 24) |
-                        ((long)(0xFF & digestOutput[26]) << 16) |
-                        ((long)(0xFF & digestOutput[25]) << 8) |
-                        ((long)(0xFF & digestOutput[24]));
+                long G =
+                      ((long)(0xFF & digestOutput[27]) << 24) |
+                      ((long)(0xFF & digestOutput[26]) << 16) |
+                      ((long)(0xFF & digestOutput[25]) << 8) |
+                      ((long)(0xFF & digestOutput[24]));
 
-                  long H =
-                        ((long)(0xFF & digestOutput[31]) << 24) |
-                        ((long)(0xFF & digestOutput[30]) << 16) |
-                        ((long)(0xFF & digestOutput[29]) << 8)  |
-                        ((long)(0xFF & digestOutput[28]));
+                long H =
+                      ((long)(0xFF & digestOutput[31]) << 24) |
+                      ((long)(0xFF & digestOutput[30]) << 16) |
+                      ((long)(0xFF & digestOutput[29]) << 8)  |
+                      ((long)(0xFF & digestOutput[28]));
 
-                  edebug("Attempt " + currentAttempts.incrementAndGet() + " from " + deviceName);
+                edebug("Attempt " + currentAttempts.incrementAndGet() + " from " + deviceName);
 
-                  if(G <= currentWork.target[6]) {
-                    if(H == 0) {
-                      currentWork.sendWork(nonce);
-                      submittedBlock = true;
-                    } else {
-                      if(hwcheck)
-                        error("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
-                      else
-                        edebug("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
-                    }
+                if(G <= currentWork.target[6]) {
+                  if(H == 0) {
+                    currentWork.sendWork(nonce);
+                    submittedBlock = true;
+                  } else {
+                    if(hwcheck)
+                      error("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
+                    else
+                      edebug("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
                   }
-
-                  resetBuffer = true;
                 }
-              }
 
-              if(resetBuffer) {
-                buffer[bufferIndex].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
-                buffer[bufferIndex].position(0);
-                CL10.clEnqueueWriteBuffer(queue, output[bufferIndex], CL10.CL_FALSE, 0, buffer[bufferIndex], null, null);
-              }
-
-              if(submittedBlock) {
-                if(currentWork.networkState.longPollAsync == null) {
-                  edebug("Forcing getwork update due to block submission");
-                  currentWork.networkState.forceUpdate();
-                }
+                resetBuffer = true;
               }
             }
 
-            skip = false;
+            if(resetBuffer) {
+              buffer[bufferIndex].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
+              buffer[bufferIndex].position(0);
+              CL10.clEnqueueWriteBuffer(queue, output[bufferIndex], CL10.CL_FALSE, 0, buffer[bufferIndex], null, null);
+            }
 
-            bufferIndex = (bufferIndex == 0) ? 1 : 0;
+            if(submittedBlock) {
+              if(currentWork.networkState.longPollAsync == null) {
+                edebug("Forcing getwork update due to block submission");
+                currentWork.networkState.forceUpdate();
+              }
+            }
+          }
 
-            workSizeTemp.put(0, workSize);
-            currentWork.update(workSizeTemp.get(0) * loops * vectors);
+          skip = false;
 
-            System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
+          bufferIndex = (bufferIndex == 0) ? 1 : 0;
 
-            sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.data[16], 0x428A2F98);
-            sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.data[17], 0x71374491);
-            sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.data[18], 0xB5C0FBCF);
+          workSizeTemp.put(0, workSize);
+          currentWork.update(workSizeTemp.get(0) * loops * vectors);
 
-            int W16 = currentWork.data[16] + (rot(currentWork.data[17], 7) ^ rot(currentWork.data[17], 18) ^
-                  (currentWork.data[17] >>> 3));
-            int W17 = currentWork.data[17] + (rot(currentWork.data[18], 7) ^ rot(currentWork.data[18], 18) ^
-                  (currentWork.data[18] >>> 3)) + 0x01100000;
-            int W18 = currentWork.data[18] + (rot(W16, 17) ^ rot(W16, 19) ^ (W16 >>> 10)) ;
-            int W19 = 0x11002000 + (rot(W17, 17) ^ rot(W17, 19) ^ (W17 >>> 10));
-            int W31 = 0x00000280 + (rot(W16, 7) ^ rot(W16, 18) ^ (W16 >>> 3));
-            int W32 = W16 + (rot(W17, 7) ^ rot(W17, 18) ^ (W17 >>> 3));
+          System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
 
-            int PreVal4 = currentWork.midstate[4] + (rot(midstate2[1], 6) ^ rot(midstate2[1], 11) ^ rot(midstate2[1], 25)) +
-                  (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
-            int T1 = (rot(midstate2[5], 2) ^ rot(midstate2[5], 13) ^ rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) |
-                  (midstate2[7] & (midstate2[5] | midstate2[6])));
+          sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, currentWork.data[16], 0x428A2F98);
+          sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, currentWork.data[17], 0x71374491);
+          sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, currentWork.data[18], 0xB5C0FBCF);
 
-            int PreVal4_plus_state0 = PreVal4 + currentWork.midstate[0];
-            int PreVal4_plus_T1 = PreVal4 + T1;
+          int W16 = currentWork.data[16] + (rot(currentWork.data[17], 7) ^ rot(currentWork.data[17], 18) ^
+                (currentWork.data[17] >>> 3));
+          int W17 = currentWork.data[17] + (rot(currentWork.data[18], 7) ^ rot(currentWork.data[18], 18) ^
+                (currentWork.data[18] >>> 3)) + 0x01100000;
+          int W18 = currentWork.data[18] + (rot(W16, 17) ^ rot(W16, 19) ^ (W16 >>> 10)) ;
+          int W19 = 0x11002000 + (rot(W17, 17) ^ rot(W17, 19) ^ (W17 >>> 10));
+          int W31 = 0x00000280 + (rot(W16, 7) ^ rot(W16, 18) ^ (W16 >>> 3));
+          int W32 = W16 + (rot(W17, 7) ^ rot(W17, 18) ^ (W17 >>> 3));
 
-            kernel.setArg(0, currentWork.midstate[0])
-                  .setArg(1, currentWork.midstate[1])
-                  .setArg(2, currentWork.midstate[2])
-                  .setArg(3, currentWork.midstate[3])
-                  .setArg(4, currentWork.midstate[4])
-                  .setArg(5, currentWork.midstate[5])
-                  .setArg(6, currentWork.midstate[6])
-                  .setArg(7, currentWork.midstate[7])
-                  .setArg(8, midstate2[1])
-                  .setArg(9, midstate2[2])
-                  .setArg(10, midstate2[3] + 0xB956c25b)
-                  .setArg(11, midstate2[5])
-                  .setArg(12, midstate2[6])
-                  .setArg(13, midstate2[7])
-                  .setArg(14, (int)(currentWork.base / loops / vectors))
-                  .setArg(15, W16)
-                  .setArg(16, W17)
-                  .setArg(17, W18)
-                  .setArg(18, W19)
-                  .setArg(19, W31)
-                  .setArg(20, W32)
-                  .setArg(21, PreVal4_plus_state0)
-                  .setArg(22, PreVal4_plus_T1)
-                  .setArg(23, output[bufferIndex]);
+          int PreVal4 = currentWork.midstate[4] + (rot(midstate2[1], 6) ^ rot(midstate2[1], 11) ^ rot(midstate2[1], 25)) +
+                (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
+          int T1 = (rot(midstate2[5], 2) ^ rot(midstate2[5], 13) ^ rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) |
+                (midstate2[7] & (midstate2[5] | midstate2[6])));
 
-            err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
+          int PreVal4_plus_state0 = PreVal4 + currentWork.midstate[0];
+          int PreVal4_plus_T1 = PreVal4 + T1;
 
-            if(err !=  CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
-              error("Failed to queue kernel, error " + err);
-              System.exit(-1);
+          kernel.setArg(0, currentWork.midstate[0])
+                .setArg(1, currentWork.midstate[1])
+                .setArg(2, currentWork.midstate[2])
+                .setArg(3, currentWork.midstate[3])
+                .setArg(4, currentWork.midstate[4])
+                .setArg(5, currentWork.midstate[5])
+                .setArg(6, currentWork.midstate[6])
+                .setArg(7, currentWork.midstate[7])
+                .setArg(8, midstate2[1])
+                .setArg(9, midstate2[2])
+                .setArg(10, midstate2[3] + 0xB956c25b)
+                .setArg(11, midstate2[5])
+                .setArg(12, midstate2[6])
+                .setArg(13, midstate2[7])
+                .setArg(14, (int)(currentWork.base / loops / vectors))
+                .setArg(15, W16)
+                .setArg(16, W17)
+                .setArg(17, W18)
+                .setArg(18, W19)
+                .setArg(19, W31)
+                .setArg(20, W32)
+                .setArg(21, PreVal4_plus_state0)
+                .setArg(22, PreVal4_plus_T1)
+                .setArg(23, output[bufferIndex]);
+
+          err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
+
+          if(err !=  CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
+            try {
+              throw new DiabloMinerFatalException("Failed to queue kernel, error " + err);
+            } catch (DiabloMinerFatalException e) {}
+          } else {
+            if(err != CL10.CL_SUCCESS) {
+              debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
+              skip = true;
             } else {
-              if(err != CL10.CL_SUCCESS) {
-                debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
-                skip = true;
-              } else {
-                err = CL10.clEnqueueReadBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
+              err = CL10.clEnqueueReadBuffer(queue, output[bufferIndex], CL10.CL_TRUE, 0, buffer[bufferIndex], null, null);
 
-                if(err != CL10.CL_SUCCESS)
-                  error("Failed to queue read buffer, error " + err);
-              }
-
-              hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
-              deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
-              currentWork.base += workSizeTemp.get(0) * loops * vectors;
-              runs.incrementAndGet();
+              if(err != CL10.CL_SUCCESS)
+                error("Failed to queue read buffer, error " + err);
             }
-           } catch (Exception e) {
-            running = false;
-            error("Uncaught exception");
-            e.printStackTrace();
-            System.exit(-1);
+
+            hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
+            deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
+            currentWork.base += workSizeTemp.get(0) * loops * vectors;
+            runs.incrementAndGet();
           }
         }
       }
@@ -1463,7 +1465,7 @@ class DiabloMiner {
         boolean rollNTime = false;
         int rolledNTime = 0;
 
-        NetworkState networkState = networkStates[(int) (networkStatesCount * Math.random())];
+        NetworkState networkState = networkStates[new Random().nextInt(networkStatesCount)];
         AtomicReference<GetWorkItem> getWorkIncoming = new AtomicReference<GetWorkItem>(null);
 
         GetWorkParser() {
@@ -1518,7 +1520,8 @@ class DiabloMiner {
             } catch (InterruptedException e) { }
           }
 
-          recieveWork();
+          if(getWorkIncoming.get() != null)
+            recieveWork();
         }
 
         void sendWork(int nonce) {
