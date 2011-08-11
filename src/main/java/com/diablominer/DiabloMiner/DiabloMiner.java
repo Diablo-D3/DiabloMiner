@@ -693,7 +693,6 @@ class DiabloMiner {
       requestStream.close();
       if(longPoll) {
         synchronized (longPollLock) {
-debug(queryUrl.getHost() + ": set LP active");
           longPollActive = true;
         }
       }
@@ -1044,7 +1043,6 @@ debug(queryUrl.getHost() + ": set LP active");
 
     boolean isLongPollActive() {
       synchronized (longPollLock) {
-debug(queryUrl.getHost() + ": LP is " + (longPollActive ? "active" : "inactive"));
         return longPollActive;
       }
     }
@@ -1060,7 +1058,6 @@ debug(queryUrl.getHost() + ": LP is " + (longPollActive ? "active" : "inactive")
             error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
           }
           synchronized (longPollLock) {
-debug(queryUrl.getHost() + ": set LP inactive");
             longPollActive = false;
           }
 
