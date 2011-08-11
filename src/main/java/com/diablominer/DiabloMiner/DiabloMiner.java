@@ -693,6 +693,7 @@ class DiabloMiner {
       requestStream.close();
       if(longPoll) {
         synchronized (longPollLock) {
+debug(queryUrl.getHost() + ": set LP active");
           longPollActive = true;
         }
       }
@@ -1038,11 +1039,12 @@ class DiabloMiner {
       }
     }
 
-    boolean longPollActive = false;
+    boolean longPollActive = true;
     Object longPollLock = new Object();
 
     boolean isLongPollActive() {
       synchronized (longPollLock) {
+debug(queryUrl.getHost() + ": LP is " + (longPollActive ? "active" : "inactive"));
         return longPollActive;
       }
     }
@@ -1058,6 +1060,7 @@ class DiabloMiner {
             error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
           }
           synchronized (longPollLock) {
+debug(queryUrl.getHost() + ": set LP inactive");
             longPollActive = false;
           }
 
@@ -1536,17 +1539,25 @@ class DiabloMiner {
         }
 
         void switchNetwork() {
-          int newIdx = -1;
           switch(networkScheduler) {
             case ROUND_ROBIN:
-              newIdx = (networkState.index+1) % networkStates.length;
+	      for (int i = 1; i < networkStates.length; i++) {
+                int newIdx = (networkState.index+i) % networkStates.length;
+                if(networkStates[newIdx].isLongPollActive()) {
+                  networkState = networkStates[newIdx];
+		  break;
+		}
+	      }
               break;
             case FAILOVER:
-              newIdx = 0;
+	      for (int i = 0; i < networkStates.length; i++) {
+                if(networkStates[i].isLongPollActive()) {
+                  networkState = networkStates[i];
+		  break;
+		}
+	      }
               break;
           }
-          if (newIdx >= 0 && networkStates[newIdx].isLongPollActive())
-            networkState = networkStates[newIdx];
         }
 
         void getWork(boolean nonceSaturation) {
