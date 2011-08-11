@@ -1056,9 +1056,9 @@ class DiabloMiner {
             debug(queryUrl.getHost() + ": Long poll returned");
           } catch(IOException e) {
             error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
-          }
-          synchronized (longPollLock) {
-            longPollActive = false;
+            synchronized (longPollLock) {
+              longPollActive = false;
+            }
           }
 
           forceUpdate();
