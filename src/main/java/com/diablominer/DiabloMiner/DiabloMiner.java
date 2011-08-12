@@ -1038,12 +1038,12 @@ class DiabloMiner {
       }
     }
 
-    boolean longPollActive = true;
+    boolean longPollActive = false;
     Object longPollLock = new Object();
 
-    boolean isLongPollActive() {
+    boolean isSwitchable() {
       synchronized(longPollLock) {
-        return longPollActive;
+        return longPollAsync == null || longPollActive;
       }
     }
 
@@ -1540,7 +1540,7 @@ class DiabloMiner {
             case ROUND_ROBIN:
               for(int i = 1; i < networkStates.length; i++) {
                 int newIdx = (networkState.index+i) % networkStates.length;
-                if(networkStates[newIdx].isLongPollActive()) {
+                if(networkStates[newIdx].isSwitchable()) {
                   networkState = networkStates[newIdx];
                   break;
                 }
@@ -1548,7 +1548,7 @@ class DiabloMiner {
               break;
             case FAILOVER:
               for(int i = 0; i < networkStates.length; i++) {
-                if(networkStates[i].isLongPollActive()) {
+                if(networkStates[i].isSwitchable()) {
                   networkState = networkStates[i];
                   break;
                 }
