@@ -692,7 +692,7 @@ class DiabloMiner {
       request.close();
       requestStream.close();
       if(longPoll) {
-        synchronized (longPollLock) {
+        synchronized(longPollLock) {
           longPollActive = true;
         }
       }
@@ -1042,7 +1042,7 @@ class DiabloMiner {
     Object longPollLock = new Object();
 
     boolean isLongPollActive() {
-      synchronized (longPollLock) {
+      synchronized(longPollLock) {
         return longPollActive;
       }
     }
@@ -1056,7 +1056,7 @@ class DiabloMiner {
             debug(queryUrl.getHost() + ": Long poll returned");
           } catch(IOException e) {
             error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
-            synchronized (longPollLock) {
+            synchronized(longPollLock) {
               longPollActive = false;
             }
           }
@@ -1501,7 +1501,7 @@ class DiabloMiner {
 
         GetWorkParser() {
           int nwsIdx;
-          switch (networkScheduler) {
+          switch(networkScheduler) {
             case FAILOVER:
               nwsIdx = 0;
               break;
@@ -1538,21 +1538,21 @@ class DiabloMiner {
         void switchNetwork() {
           switch(networkScheduler) {
             case ROUND_ROBIN:
-	      for (int i = 1; i < networkStates.length; i++) {
+              for(int i = 1; i < networkStates.length; i++) {
                 int newIdx = (networkState.index+i) % networkStates.length;
                 if(networkStates[newIdx].isLongPollActive()) {
                   networkState = networkStates[newIdx];
-		  break;
-		}
-	      }
+                  break;
+                }
+              }
               break;
             case FAILOVER:
-	      for (int i = 0; i < networkStates.length; i++) {
+              for(int i = 0; i < networkStates.length; i++) {
                 if(networkStates[i].isLongPollActive()) {
                   networkState = networkStates[i];
-		  break;
-		}
-	      }
+                  break;
+                }
+              }
               break;
           }
         }
