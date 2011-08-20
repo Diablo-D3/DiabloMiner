@@ -358,8 +358,18 @@ class DiabloMiner {
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
     byte[] data = new byte[64 * 1024];
+    int pos = 0;
 
-    if(stream.read(data) < 1)
+    while(pos < data.length) {
+      int ret = stream.read(data, pos, data.length - pos);
+
+      if(ret < 1)
+        break;
+      else
+        pos += ret;
+    }
+
+    if(pos == 0)
       throw new DiabloMinerFatalException("Unable to read DiabloMiner.cl");
 
     source = new String(data).trim();
@@ -405,13 +415,13 @@ class DiabloMiner {
               }
             } else if(sourceLine.contains("& 0xF")) {
               if(vectorWidth ==  2) {
-                replace = replace.replace("ZV[7]", "ZV[7].x").replaceAll("nonce", "nonce.x")
-                        + replace.replace("ZV[7]", "ZV[7].y").replaceAll("nonce", "nonce.y");
+                replace = replace.replace("ZG[2]", "ZG[2].x").replaceAll("nonce", "nonce.x")
+                        + replace.replace("ZG[2]", "ZG[2].y").replaceAll("nonce", "nonce.y");
               } else if(vectorWidth == 4) {
-                replace = replace.replace("ZV[7]", "ZV[7].s0").replaceAll("nonce", "nonce.s0")
-                        + replace.replace("ZV[7]", "ZV[7].s1").replaceAll("nonce", "nonce.s1")
-                        + replace.replace("ZV[7]", "ZV[7].s2").replaceAll("nonce", "nonce.s2")
-                        + replace.replace("ZV[7]", "ZV[7].s3").replaceAll("nonce", "nonce.s3");
+                replace = replace.replace("ZG[2]", "ZG[2].s0").replaceAll("nonce", "nonce.s0")
+                        + replace.replace("ZG[2]", "ZG[2].s1").replaceAll("nonce", "nonce.s1")
+                        + replace.replace("ZG[2]", "ZG[2].s2").replaceAll("nonce", "nonce.s2")
+                        + replace.replace("ZG[2]", "ZG[2].s3").replaceAll("nonce", "nonce.s3");
               }
             }
           } else {
@@ -429,7 +439,7 @@ class DiabloMiner {
 
     if(line.hasOption("ds")) {
       System.out.println("\n---\n" + source);
-      return;
+      throw new DiabloMinerFatalException("Debug kernel source output, quitting");
     }
 
     targetFPSBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
@@ -939,15 +949,14 @@ class DiabloMiner {
             GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
 
             if(getWorkItem.pulled + refresh > getNow()) {
-              getWorkParser.getWorkIncoming.set(getWorkItem);
+              getWorkParser.getWorkIncoming.push(getWorkItem);
             } else {
               getWorkQueue.push(getWorkParser);
             }
           } else {
             try {
               GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
-              getWorkParser.getWorkIncoming.set(getWorkItem);
-              getWorkParser.rollNTime = rollNTime;
+              getWorkParser.getWorkIncoming.push(getWorkItem);
             } catch (IOException e) {
               error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
 
@@ -1065,7 +1074,7 @@ class DiabloMiner {
     int loops = 1;
 
     DeviceState(CLPlatform platform, CLDevice device, int count) throws Exception {
-      boolean hasBitAlign = false;
+      boolean hasBitAlign;
       CLProgram program;
 
       this.device = device;
@@ -1091,6 +1100,8 @@ class DiabloMiner {
 
       if(new String(exta).contains("cl_amd_media_ops"))
         hasBitAlign = true;
+      else
+        hasBitAlign = false;
 
       if(zloops > 1)
         loops = zloops;
@@ -1466,14 +1477,14 @@ class DiabloMiner {
         int rolledNTime = 0;
 
         NetworkState networkState = networkStates[new Random().nextInt(networkStatesCount)];
-        AtomicReference<GetWorkItem> getWorkIncoming = new AtomicReference<GetWorkItem>(null);
+        LinkedBlockingDeque<GetWorkItem> getWorkIncoming = new LinkedBlockingDeque<GetWorkItem>();
 
         GetWorkParser() {
           getWork(false);
         }
 
         void update(long delta) {
-          if(getWorkIncoming.get() != null) {
+          if(getWorkIncoming.peek() != null) {
             recieveWork();
           } else if(base + delta > TWO32) {
             getWork(true);
@@ -1483,13 +1494,21 @@ class DiabloMiner {
         }
 
         void recieveWork() {
-          GetWorkItem workItem = getWorkIncoming.getAndSet(null);
+          GetWorkItem workItem = null;
 
-          parse(workItem.json);
-          lastPulled = workItem.pulled;
-          rollNTime = workItem.rollNtime;
-          base = 0;
-          rolledNTime = 0;
+          while(workItem == null) {
+            try {
+              workItem = getWorkIncoming.take();
+            } catch (InterruptedException e) { }
+          }
+
+          if(workItem != null) {
+            parse(workItem.json);
+            lastPulled = workItem.pulled;
+            rollNTime = workItem.rollNtime;
+            base = 0;
+            rolledNTime = 0;
+          }
         }
 
         void getWork(boolean nonceSaturation) {
@@ -1514,14 +1533,7 @@ class DiabloMiner {
 
           networkState.getWorkAsync.add(this);
 
-          while(getWorkIncoming.get() == null) {
-            try {
-              Thread.sleep(1);
-            } catch (InterruptedException e) { }
-          }
-
-          if(getWorkIncoming.get() != null)
-            recieveWork();
+          recieveWork();
         }
 
         void sendWork(int nonce) {
