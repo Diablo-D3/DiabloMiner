@@ -95,6 +95,7 @@ class DiabloMiner {
   boolean hwcheck = true;
   boolean debug = false;
   boolean edebug = false;
+  boolean array = false;
 
   double targetFPS = 30.0;
   double targetFPSBasis;
@@ -148,6 +149,7 @@ class DiabloMiner {
     getWorkMessage.put("id", 1);
 
     Options options = new Options();
+    options.addOption("a", "array", false, "use arrays to force register layout");
     options.addOption("u", "user", true, "bitcoin host username");
     options.addOption("p", "pass", true, "bitcoin host password");
     options.addOption("f", "fps", true, "target execution timing");
@@ -203,6 +205,9 @@ class DiabloMiner {
 
     if(line.hasOption("loops"))
       zloops = (int) Math.pow(2, Integer.parseInt(line.getOptionValue("loops")));
+
+    if(line.hasOption("array"))
+      array = true;
 
     if(line.hasOption("vectors")) {
       vectors = Integer.parseInt(line.getOptionValue("vectors"));
@@ -393,13 +398,18 @@ class DiabloMiner {
     for(int x = 0; x < sourceLines.length; x++) {
       String sourceLine = sourceLines[x];
 
-      if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__attribute__")) {
-        for(int y = 0; y < actualVectors; y++) {
-          String replace = sourceLine;
+      if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__")) {
+       if(!array) {
+         sourceLine = sourceLine.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13");
+         sourceLine = sourceLine.replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
+       }
 
-          if((y == 0 && xvectors == true) ||
-             (y == 1 && yvectors == true) ||
-             (y == 2 && zvectors == true)) {
+       for(int y = 0; y < actualVectors; y++) {
+         String replace = sourceLine;
+
+         if((y == 0 && xvectors == true) ||
+            (y == 1 && yvectors == true) ||
+            (y == 2 && zvectors == true)) {
             if(replace.contains("typedef")) {
               if(vectorWidth == 2)
                 replace = replace.replace("uint", "uint2");
@@ -413,16 +423,20 @@ class DiabloMiner {
                 replace = replace.replace(";", " + (uint4)(" + vectorBase + ", " + (vectorBase + vectorOffset) +  ", " + (vectorBase + vectorOffset * 2) +  ", " + (vectorBase + vectorOffset * 3) + ");");
                 vectorBase += vectorOffset * 4;
               }
-            } else if(sourceLine.contains("& 0xF")) {
-              if(vectorWidth ==  2) {
-                replace = replace.replace("ZG[2]", "ZG[2].x").replaceAll("nonce", "nonce.x")
-                        + replace.replace("ZG[2]", "ZG[2].y").replaceAll("nonce", "nonce.y");
-              } else if(vectorWidth == 4) {
-                replace = replace.replace("ZG[2]", "ZG[2].s0").replaceAll("nonce", "nonce.s0")
-                        + replace.replace("ZG[2]", "ZG[2].s1").replaceAll("nonce", "nonce.s1")
-                        + replace.replace("ZG[2]", "ZG[2].s2").replaceAll("nonce", "nonce.s2")
-                        + replace.replace("ZG[2]", "ZG[2].s3").replaceAll("nonce", "nonce.s3");
-              }
+            } else if(sourceLine.contains("output[")) {
+              String lastVar;
+
+              if(array)
+                lastVar = "ZG[2]";
+              else
+                lastVar = "ZG2";
+
+              String end = "";
+
+              for(int i = 0; i < vectorWidth; i++)
+                end += replace.replace(lastVar, lastVar + ".s" + i).replaceAll("nonce", "nonce.s" + i) + "\n";
+
+              replace = end;
             }
           } else {
             if(replace.contains("global")) {
