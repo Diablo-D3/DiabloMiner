@@ -25,8 +25,8 @@ typedef uint z;
 #define Ma(a, b, c) amd_bytealign((c ^ a), (b), (a))
 #else
 #define Zrotr(a, b) rotate((z)a, (z)b)
-#define Ch(a, b, c) (c ^ (a & (b ^ c)))
-#define Ma(a, b, c) ((b & c) | (a & (b | c)))
+#define Ch(a, b, c) bitselect((z)c, (z)b, (z)a)
+#define Ma(a, b, c) bitselect((z)a, (z)b, (z)c ^ (z)a)
 #endif
 
 #define ZR25Con(n) ((Zrotr((n), 25) ^ Zrotr((n), 14) ^ ((n) >> 3U)))
