@@ -84,9 +84,14 @@ class DiabloMiner {
   final static int OUTPUTS = 16;
   final static long TWO32 = 4294967295L;
   final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];
+  final static int RANDOM = 0;
+  final static int ROUND_ROBIN = 1;
+  final static int FAILOVER = 2;
 
   NetworkState[] networkStates;
   int networkStatesCount;
+  int networkStateIndex = 0;
+  int networkScheduler = RANDOM;
   Proxy proxy = null;
   int getWorkRefresh = 5000;
   final ObjectMapper mapper = new ObjectMapper();
@@ -156,6 +161,7 @@ class DiabloMiner {
     options.addOption("w", "worksize", true, "override worksize");
     options.addOption("o", "host", true, "bitcoin host IP");
     options.addOption("r", "port", true, "bitcoin host port");
+    options.addOption("s", "scheduler", true, "bitcoin host scheduler");
     options.addOption("g", "getWork", true, "seconds between getWork refresh");
     options.addOption("D", "devices", true, "devices to enable");
     options.addOption("x", "proxy", true, "optional proxy settings IP:PORT<:username:password>");
@@ -283,6 +289,14 @@ class DiabloMiner {
 
     if(line.hasOption("port"))
       splitPort = line.getOptionValue("port").split(",");
+
+    if(line.hasOption("scheduler")) {
+      String sched = line.getOptionValue("scheduler");
+      if(sched.equalsIgnoreCase("round-robin"))
+        networkScheduler = ROUND_ROBIN;
+      else if(sched.equalsIgnoreCase("failover"))
+        networkScheduler = FAILOVER;
+    }
 
     networkStatesCount = 0;
 
@@ -701,6 +715,11 @@ class DiabloMiner {
       request.write(requestMessage.toString());
       request.close();
       requestStream.close();
+      if(longPoll) {
+        synchronized(longPollLock) {
+          longPollActive = true;
+        }
+      }
 
       ObjectNode responseMessage = null;
 
@@ -975,7 +994,7 @@ class DiabloMiner {
               error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
 
               if(getWorkParser.networkState.index < networkStatesCount - 1)
-                getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
+                getWorkParser.networkState = networkStates[getWorkParser.networkState.index+1];
               else
                 getWorkParser.networkState = networkStates[0];
 
@@ -1042,6 +1061,15 @@ class DiabloMiner {
       }
     }
 
+    boolean longPollActive = false;
+    Object longPollLock = new Object();
+
+    boolean isSwitchable() {
+      synchronized(longPollLock) {
+        return longPollAsync == null || longPollActive;
+      }
+    }
+
     class LongPollAsync implements Runnable {
       public void run() {
         while(running.get()) {
@@ -1051,6 +1079,9 @@ class DiabloMiner {
             debug(queryUrl.getHost() + ": Long poll returned");
           } catch(IOException e) {
             error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
+            synchronized(longPollLock) {
+              longPollActive = false;
+            }
           }
 
           forceUpdate();
@@ -1490,10 +1521,22 @@ class DiabloMiner {
         boolean rollNTime = false;
         int rolledNTime = 0;
 
-        NetworkState networkState = networkStates[new Random().nextInt(networkStatesCount)];
+        NetworkState networkState;
         LinkedBlockingDeque<GetWorkItem> getWorkIncoming = new LinkedBlockingDeque<GetWorkItem>();
 
         GetWorkParser() {
+          int nwsIdx;
+          switch(networkScheduler) {
+            case FAILOVER:
+              nwsIdx = 0;
+              break;
+            case ROUND_ROBIN:
+              nwsIdx = (networkStateIndex++) % networkStatesCount;
+              break;
+            default:
+              nwsIdx = (int)(networkStatesCount * Math.random());
+          }
+          networkState = networkStates[nwsIdx];
           getWork(false);
         }
 
@@ -1525,6 +1568,28 @@ class DiabloMiner {
           }
         }
 
+        void switchNetwork() {
+          switch(networkScheduler) {
+            case ROUND_ROBIN:
+              for(int i = 1; i < networkStates.length; i++) {
+                int newIdx = (networkState.index+i) % networkStates.length;
+                if(networkStates[newIdx].isSwitchable()) {
+                  networkState = networkStates[newIdx];
+                  break;
+                }
+              }
+              break;
+            case FAILOVER:
+              for(int i = 0; i < networkStates.length; i++) {
+                if(networkStates[i].isSwitchable()) {
+                  networkState = networkStates[i];
+                  break;
+                }
+              }
+              break;
+          }
+        }
+
         void getWork(boolean nonceSaturation) {
           if(nonceSaturation) {
             if(rollNTime && networkState.rollNTime) {
@@ -1536,6 +1601,7 @@ class DiabloMiner {
                 debug("Deferring getwork update due to nonce saturation");
               } else {
                 debug("Forcing getwork update due to nonce saturation");
+                switchNetwork();
                 networkState.getWorkAsync.add(this);
               }
 
@@ -1545,6 +1611,7 @@ class DiabloMiner {
             }
           }
 
+          switchNetwork();
           networkState.getWorkAsync.add(this);
 
           recieveWork();
