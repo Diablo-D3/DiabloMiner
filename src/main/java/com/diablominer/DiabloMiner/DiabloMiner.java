@@ -744,6 +744,8 @@ class DiabloMiner {
                 try {
                   refresh = Integer.parseInt(xRollNTime.substring(7))  * 1000;
                 } catch (NumberFormatException ex) { }
+              } else {
+                refresh = 60000;
               }
 
               debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + (refresh / 1000) + " seconds");
