@@ -79,7 +79,7 @@ import com.diablominer.DiabloMiner.DiabloMiner.DeviceState.ExecutionState.GetWor
 import com.diablominer.DiabloMiner.DiabloMiner.NetworkState.GetWorkItem;
 
 class DiabloMiner {
-  final static int EXECUTION_TOTAL = 2;
+  final static int EXECUTION_TOTAL = 3;
   final static long TIME_OFFSET = 7500;
   final static int OUTPUTS = 16;
   final static long TWO32 = 4294967295L;
