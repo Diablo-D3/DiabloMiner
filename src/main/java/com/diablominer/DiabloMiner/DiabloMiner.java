@@ -952,7 +952,9 @@ class DiabloMiner {
             try {
               GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
               queueIncoming.compareAndSet(null, getWorkItem);
-            } catch (IOException e) {}
+            } catch (IOException e) {
+              error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
+            }
           }
 
           try {
@@ -964,29 +966,22 @@ class DiabloMiner {
           if(queueIncoming.get() != null) {
             GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
 
-            if(getWorkItem.pulled + refresh > getNow()) {
+            if(getWorkItem.pulled + refresh > getNow() + 1) {
               getWorkParser.getWorkIncoming.push(getWorkItem);
             } else {
               getWorkQueue.push(getWorkParser);
             }
           } else {
+            if(getWorkParser.networkState.index < networkStatesCount - 1)
+              getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
+            else
+              getWorkParser.networkState = networkStates[0];
+
+            getWorkParser.networkState.getWorkAsync.add(getWorkParser);
+
             try {
-              GetWorkItem getWorkItem = new GetWorkItem(doJSONRPC(false, false, getWorkMessage), rollNTime);
-              getWorkParser.getWorkIncoming.push(getWorkItem);
-            } catch (IOException e) {
-              error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
-
-              if(getWorkParser.networkState.index < networkStatesCount - 1)
-                getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
-              else
-                getWorkParser.networkState = networkStates[0];
-
-              getWorkParser.networkState.getWorkAsync.add(getWorkParser);
-
-              try {
-                Thread.sleep(500);
-              } catch (InterruptedException e1) { }
-            }
+              Thread.sleep(250);
+            } catch (InterruptedException e1) { }
           }
         }
       }
@@ -1032,7 +1027,7 @@ class DiabloMiner {
               }
 
               try {
-                Thread.sleep(500);
+                Thread.sleep(250);
               } catch (InterruptedException e1) { }
             }
           }
@@ -1058,7 +1053,7 @@ class DiabloMiner {
           forceUpdate();
 
           try {
-            Thread.sleep(500);
+            Thread.sleep(250);
           } catch (InterruptedException e) {}
         }
       }
