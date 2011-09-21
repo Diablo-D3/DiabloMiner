@@ -318,24 +318,24 @@ class DiabloMiner {
 
         URL url = new URL(splitUrl[i]);
 
-        if(!"".equals(url.getProtocol()))
+        if(url.getProtocol() != null && url.getProtocol().length() > 1)
           protocol = url.getProtocol();
 
-        if(!"".equals(url.getHost()))
+        if(url.getHost() != null && url.getHost().length() > 1)
           host = url.getHost();
 
         if(url.getPort() != -1)
           port = url.getPort();
 
-        if(!"".equals(url.getPath()))
+        if(url.getPath() != null && url.getPath().length() > 1)
           path = url.getPath();
 
-        if(!"".equals(url.getUserInfo())) {
-          String[] userPassSplit = url.getUserInfo().split(":");
+        if(url.getUserInfo() != null && url.getUserInfo().length() > 1) {
+          String [] userPassSplit = url.getUserInfo().split(":");
 
-          user = userPassSplit[0].replace("+++++", "@");;
+          user = userPassSplit[0].replace("+++++", "@");
 
-          if(userPassSplit.length > 1 && !"".equals(userPassSplit[1]))
+          if(userPassSplit.length > 1 && userPassSplit[1].length() > 1)
             pass = userPassSplit[1];
         }
       }
