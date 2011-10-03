@@ -708,29 +708,27 @@ class DiabloMiner {
 
       try {
         if(!sendWork) {
-          if(!longPoll) {
-            String xLongPolling = connection.getHeaderField("X-Long-Polling");
+          String xLongPolling = connection.getHeaderField("X-Long-Polling");
 
-            if(xLongPolling != null) {
-              if(xLongPolling.startsWith("http"))
-                longPollUrl = new URL(xLongPolling);
-              else if(xLongPolling.startsWith("/"))
-                longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(),
-                      xLongPolling);
-              else
-                longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(),
-                      (url.getFile() + "/" + xLongPolling).replace("//", "/"));
+          if(xLongPolling != null && !"".equals(xLongPolling)) {
+            if(xLongPolling.startsWith("http"))
+              longPollUrl = new URL(xLongPolling);
+            else if(xLongPolling.startsWith("/"))
+              longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(),
+                    xLongPolling);
+            else
+              longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(),
+                    (url.getFile() + "/" + xLongPolling).replace("//", "/"));
 
-              if(longPollAsync == null) {
-                longPollAsync = new LongPollAsync();
-                Thread thread = new Thread(longPollAsync, "DiabloMiner LongPollAsync for " + url.getHost());
-                thread.start();
-                threads.add(thread);
+            if(longPollAsync == null) {
+              longPollAsync = new LongPollAsync();
+              Thread thread = new Thread(longPollAsync, "DiabloMiner LongPollAsync for " + url.getHost());
+              thread.start();
+              threads.add(thread);
 
-                refresh = 60000;
+              refresh = 60000;
 
-                debug(queryUrl.getHost() + ": Enabling long poll support");
-              }
+              debug(queryUrl.getHost() + ": Enabling long poll support");
             }
           }
 
