@@ -1541,7 +1541,8 @@ class DiabloMiner {
                 debug("Forcing getwork update due to nonce saturation");
                 forceSync = true;
               } else if(rolledNTime * 1000 + 1000 >= networkState.refresh) {
-                debug("Async getwork update due to nonce saturation");
+                if(debug && !networkState.getWorkAsync.getWorkQueue.contains(this))
+                  debug("Async getwork update due to nonce saturation");
                 nonceSaturation = false;
               }
             } else {
@@ -1549,7 +1550,8 @@ class DiabloMiner {
             }
           } else {
             if(!forceSync)
-              debug("Async getwork update due to time");
+              if(debug && !networkState.getWorkAsync.getWorkQueue.contains(this))
+                debug("Async getwork update due to time");
             else if(lastPulled == 0)
               debug("Forcing getwork update due to long poll return");
             else if(lastPulled != 1)
