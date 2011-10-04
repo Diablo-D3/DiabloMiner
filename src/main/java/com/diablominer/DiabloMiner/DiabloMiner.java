@@ -913,6 +913,8 @@ class DiabloMiner {
             getWorkParser.lastPulled = 0;
         }
       }
+
+      sendWorkAsync.sendWorkQueue.clear();
     }
 
     class GetWorkItem {
@@ -961,10 +963,10 @@ class DiabloMiner {
             continue;
           }
 
-          if(queueIncoming.get() != null) {
+          if(queueIncoming.get() != null && getWorkParser != null) {
             GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
 
-            if(getWorkItem.pulled + refresh > getNow() + 1) {
+            if(getWorkItem.pulled + refresh + 1000 > getNow()) {
               getWorkParser.getWorkIncoming.push(getWorkItem);
             } else {
               getWorkQueue.push(getWorkParser);
@@ -985,7 +987,8 @@ class DiabloMiner {
       }
 
       void add(GetWorkParser getWorkParser) {
-        getWorkQueue.add(getWorkParser);
+        if(!getWorkQueue.contains(getWorkParser))
+          getWorkQueue.add(getWorkParser);
       }
     }
 
@@ -1464,9 +1467,11 @@ class DiabloMiner {
                 error("Failed to queue read buffer, error " + err);
             }
 
-            hashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
-            deviceHashCount.addAndGet(workSizeTemp.get(0) * loops * vectors);
-            currentWork.base += workSizeTemp.get(0) * loops * vectors;
+            long increment = workSizeTemp.get(0) * loops * vectors;
+
+            hashCount.addAndGet(increment);
+            deviceHashCount.addAndGet(increment);
+            currentWork.base += increment;
             runs.incrementAndGet();
           }
         }
@@ -1480,7 +1485,7 @@ class DiabloMiner {
         StringBuilder dataOutput = new StringBuilder(8*32 + 1);
         Formatter dataFormatter = new Formatter(dataOutput);
 
-        long lastPulled = 0;
+        long lastPulled = 1;
         long base = 0;
         boolean rollNTime = false;
         int rolledNTime = 0;
@@ -1489,16 +1494,18 @@ class DiabloMiner {
         LinkedBlockingDeque<GetWorkItem> getWorkIncoming = new LinkedBlockingDeque<GetWorkItem>();
 
         GetWorkParser() {
-          getWork(false);
+          getWork(false, true);
         }
 
         void update(long delta) {
           if(getWorkIncoming.peek() != null) {
             recieveWork();
           } else if(base + delta > TWO32) {
-            getWork(true);
-          } else if(lastPulled + networkState.refresh < getNow()) {
-            getWork(false);
+            getWork(true, true);
+          } else if(getNow() - networkState.refresh >= lastPulled) {
+            getWork(false, true);
+          } else if(getNow() - networkState.refresh + 1000 >= lastPulled) {
+            getWork(false, false);
           }
         }
 
@@ -1520,29 +1527,39 @@ class DiabloMiner {
           }
         }
 
-        void getWork(boolean nonceSaturation) {
+        void getWork(boolean nonceSaturation, boolean forceSync) {
           if(nonceSaturation) {
             if(rollNTime && networkState.rollNTime) {
               base = 0;
               data[17] = Integer.reverseBytes(Integer.reverseBytes(data[17]) + 1);
               rolledNTime++;
 
-              if(rolledNTime < networkState.refresh / 1000) {
+              if(rolledNTime * 1000 + 1000 < networkState.refresh) {
                 debug("Deferring getwork update due to nonce saturation");
-              } else {
+                return;
+              } else if(rolledNTime * 1000 >= networkState.refresh) {
                 debug("Forcing getwork update due to nonce saturation");
-                networkState.getWorkAsync.add(this);
+                forceSync = true;
+              } else if(rolledNTime * 1000 + 1000 >= networkState.refresh) {
+                debug("Async getwork update due to nonce saturation");
+                nonceSaturation = false;
               }
-
-              return;
             } else {
               debug("Forcing getwork update due to nonce saturation");
             }
+          } else {
+            if(!forceSync)
+              debug("Async getwork update due to time");
+            else if(lastPulled == 0)
+              debug("Forcing getwork update due to long poll return");
+            else if(lastPulled != 1)
+              debug("Forcing getwork update due to time");
           }
 
           networkState.getWorkAsync.add(this);
 
-          recieveWork();
+          if(nonceSaturation || forceSync)
+            recieveWork();
         }
 
         void sendWork(int nonce) {
