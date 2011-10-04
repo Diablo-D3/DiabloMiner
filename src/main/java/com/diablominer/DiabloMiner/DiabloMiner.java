@@ -1549,13 +1549,14 @@ class DiabloMiner {
               debug("Forcing getwork update due to nonce saturation");
             }
           } else {
-            if(!forceSync)
+            if(!forceSync) {
               if(debug && !networkState.getWorkAsync.getWorkQueue.contains(this))
                 debug("Async getwork update due to time");
-            else if(lastPulled == 0)
+            } else if(lastPulled == 0) {
               debug("Forcing getwork update due to long poll return");
-            else if(lastPulled != 1)
+            } else if(lastPulled != 1) {
               debug("Forcing getwork update due to time");
+            }
           }
 
           networkState.getWorkAsync.add(this);
