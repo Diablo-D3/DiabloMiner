@@ -1245,7 +1245,7 @@ class DiabloMiner {
 
       workSizeBase = localWorkSize.get(0) * localWorkSize.get(0);
 
-      workSize = workSizeBase * 32;
+      workSize = workSizeBase * 4;
 
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
@@ -1263,14 +1263,18 @@ class DiabloMiner {
       if(now > startTime + TIME_OFFSET * 2 && currentRuns > lastRuns + targetFPS) {
         basis = (double)elapsed / (double)(currentRuns - lastRuns);
 
-        if(basis < targetFPSBasis / 3)
-          workSize += workSizeBase * 30;
-        else if(basis < targetFPSBasis / 1.5)
-          workSize += workSizeBase * 15;
+        if(basis < targetFPSBasis / EXECUTION_TOTAL * 1.5 * 1.5)
+          workSize += workSizeBase * EXECUTION_TOTAL * 11;
+        else if(basis < targetFPSBasis / EXECUTION_TOTAL * 1.5)
+          workSize += workSizeBase * EXECUTION_TOTAL * 5;
+        else if(basis < targetFPSBasis / EXECUTION_TOTAL)
+          workSize += workSizeBase * EXECUTION_TOTAL * 3;
         else if(basis < targetFPSBasis)
           workSize += workSizeBase;
-        else if(basis > targetFPSBasis * 1.5)
-          workSize -= workSizeBase * 15;
+        else if(basis > targetFPSBasis * EXECUTION_TOTAL * 1.5)
+          workSize -= workSizeBase * EXECUTION_TOTAL * 5;
+        else if(basis > targetFPSBasis * EXECUTION_TOTAL)
+          workSize -= workSizeBase * EXECUTION_TOTAL * 3;
         else if(basis > targetFPSBasis)
           workSize -= workSizeBase;
 
