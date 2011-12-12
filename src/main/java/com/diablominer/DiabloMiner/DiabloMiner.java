@@ -1367,7 +1367,7 @@ class DiabloMiner {
 
                 edebug("Attempt " + currentAttempts.incrementAndGet() + " from " + deviceName);
 
-                if(G <= currentWork.target[6]) {
+                if(currentWork.target[7] != 0 || G <= currentWork.target[6]) {
                   if(H == 0) {
                     currentWork.sendWork(nonce);
                     submittedBlock = true;
