@@ -1263,9 +1263,7 @@ class DiabloMiner {
       if(now > startTime + TIME_OFFSET * 2 && currentRuns > lastRuns + targetFPS) {
         basis = (double)elapsed / (double)(currentRuns - lastRuns);
 
-        if(basis < targetFPSBasis / EXECUTION_TOTAL * 1.5 * 1.5)
-          workSize += workSizeBase * EXECUTION_TOTAL * 11;
-        else if(basis < targetFPSBasis / EXECUTION_TOTAL * 1.5)
+        if(basis < targetFPSBasis / EXECUTION_TOTAL * 1.5)
           workSize += workSizeBase * EXECUTION_TOTAL * 5;
         else if(basis < targetFPSBasis / EXECUTION_TOTAL)
           workSize += workSizeBase * EXECUTION_TOTAL * 3;
