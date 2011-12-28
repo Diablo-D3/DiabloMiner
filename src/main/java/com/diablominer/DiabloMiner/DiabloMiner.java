@@ -1087,6 +1087,7 @@ class DiabloMiner {
 
     DeviceState(CLPlatform platform, CLDevice device, int count) throws Exception {
       boolean hasBitAlign;
+      boolean hasBFI_INT = false;
       CLProgram program;
 
       this.device = device;
@@ -1115,6 +1116,24 @@ class DiabloMiner {
       else
         hasBitAlign = false;
 
+      if(hasBitAlign) {
+        if(deviceName.contains("Cedar")      ||
+           deviceName.contains("Redwood")    ||
+           deviceName.contains("Juniper")    ||
+           deviceName.contains("Cypress")    ||
+           deviceName.contains("Hemlock")    ||
+           deviceName.contains("Caicos")     ||
+           deviceName.contains("Turks")      ||
+           deviceName.contains("Barts")      ||
+           deviceName.contains("Cayman")     ||
+           deviceName.contains("Antilles")   ||
+           deviceName.contains("Wrestler")   ||
+           deviceName.contains("Zacate")     ||
+           deviceName.contains("WinterPark") ||
+           deviceName.contains("BeaverCreek"))
+          hasBFI_INT = true;
+      }
+
       if(zloops > 1)
         loops = zloops;
       else if(zloops <= 1)
@@ -1129,6 +1148,9 @@ class DiabloMiner {
 
       if(hasBitAlign)
         compileOptions += " -D BITALIGN";
+
+      if(hasBFI_INT)
+        compileOptions += " -D BFIINT";
 
       if(loops > 1) {
         compileOptions += " -D DOLOOPS";
@@ -1151,7 +1173,7 @@ class DiabloMiner {
         throw new DiabloMinerFatalException("Failed to build program on " + deviceName);
       }
 
-      if(hasBitAlign) {
+      if(hasBFI_INT) {
         info("BFI_INT patching enabled, disabling hardware check errors");
         hwcheck = false;
 
