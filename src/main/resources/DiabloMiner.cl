@@ -60,6 +60,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     const uint W18, const uint W19,
     const uint W31, const uint W32,
     const uint PreVal4_plus_state0, const uint PreVal4_plus_T1,
+    const uint b1_plus_k6, const uint c1_plus_k5,
     __global uint * output)
 {
   z ZA[4];
@@ -104,10 +105,10 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZB[2] = d1 + Ch(ZA[0], b1, c1) + ZR26(ZA[0]);
     ZC[2] = h1 + ZB[2];
     ZD[2] = ZB[2] + ZR30(ZB[0]) + Ma(f1, g1, ZB[0]);
-    ZE[2] = c1 + K[5] + Ch(ZC[2], ZA[0], b1) + ZR26(ZC[2]);
+    ZE[2] = c1_plus_k5 + Ch(ZC[2], ZA[0], b1) + ZR26(ZC[2]);
     ZF[2] = g1 + ZE[2];
     ZG[2] = ZE[2] + ZR30(ZD[2]) + Ma(ZB[0], f1, ZD[2]);
-    ZH[2] = b1 + K[6] + Ch(ZF[2], ZC[2], ZA[0]) + ZR26(ZF[2]);
+    ZH[2] = b1_plus_k6 + Ch(ZF[2], ZC[2], ZA[0]) + ZR26(ZF[2]);
     ZA[3] = f1 + ZH[2];
     ZB[3] = ZH[2] + ZR30(ZG[2]) + Ma(ZD[2], ZB[0], ZG[2]);
     ZC[3] = ZA[0] + K[7] + Ch(ZA[3], ZF[2], ZC[2]) + ZR26(ZA[3]);

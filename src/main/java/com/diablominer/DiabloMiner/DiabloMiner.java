@@ -1448,6 +1448,8 @@ class DiabloMiner {
 
           int PreVal4_plus_state0 = PreVal4 + currentWork.midstate[0];
           int PreVal4_plus_T1 = PreVal4 + T1;
+          int B1_plus_K6 = midstate2[1] + 0x923f82a4;
+          int C1_plus_K5 = midstate2[2] + 0x59f111f1;
 
           kernel.setArg(0, currentWork.midstate[0])
                 .setArg(1, currentWork.midstate[1])
@@ -1472,7 +1474,9 @@ class DiabloMiner {
                 .setArg(20, W32)
                 .setArg(21, PreVal4_plus_state0)
                 .setArg(22, PreVal4_plus_T1)
-                .setArg(23, output[bufferIndex]);
+                .setArg(23, B1_plus_K6)
+                .setArg(24, C1_plus_K5)
+                .setArg(25, output[bufferIndex]);
 
           err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
 
