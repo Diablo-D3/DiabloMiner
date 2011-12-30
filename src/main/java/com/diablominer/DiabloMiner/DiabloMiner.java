@@ -39,7 +39,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Formatter;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -96,6 +95,7 @@ class DiabloMiner {
   boolean debug = false;
   boolean edebug = false;
   boolean array = false;
+  boolean donate = false;
 
   double targetFPS = 30.0;
   double targetFPSBasis;
@@ -165,6 +165,7 @@ class DiabloMiner {
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("ds", "ksource", false, "output kernel source and quit");
+    options.addOption("b", "donate", false, "donate BTC to DiabloMiner development");
     options.addOption("h", "help", false, "this help");
 
     PosixParser parser = new PosixParser();
@@ -208,6 +209,9 @@ class DiabloMiner {
 
     if(line.hasOption("array"))
       array = true;
+
+    if(line.hasOption("donate"))
+      donate = true;
 
     if(line.hasOption("vectors")) {
       vectors = Integer.parseInt(line.getOptionValue("vectors"));
@@ -301,9 +305,28 @@ class DiabloMiner {
     if(splitPort != null)
       networkStatesCount = Math.max(splitPort.length, networkStatesCount);
 
-    networkStates = new NetworkState[networkStatesCount];
 
-    for(int i = 0; i < networkStatesCount; i++) {
+    if(networkStatesCount == 0) {
+      error("You forgot to give any bitcoin connection info, please add either -l, or -u -p -o and -r");
+    }
+
+    int j = 0;
+
+    if(donate) {
+      j++;
+      networkStatesCount++;
+
+      networkStates = new NetworkState[networkStatesCount];
+
+      networkStates[0] = new NetworkState(new URL("http", "mining.eligius.st", 8337, "/"),
+            "1L12ACGxLH8kL2Zp7Sy6P8wgfQopDVyaoe", "", 0);
+
+      info("You are donating to DiabloMiner, thank you!");
+    } else {
+      networkStates = new NetworkState[networkStatesCount];
+    }
+
+    for(int i = 0; j < networkStatesCount; i++, j++) {
       String protocol = "http";
       String host = "localhost";
       int port = 8332;
@@ -352,13 +375,7 @@ class DiabloMiner {
       if(splitPort != null && splitPort.length > i)
         port = Integer.parseInt(splitPort[i]);
 
-      String userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim().replace("\r\n", "");
-
-      networkStates[i] = new NetworkState(new URL(protocol, host, port, path), userPass, i);
-    }
-
-    if(networkStates.length == 0) {
-      error("You forgot to give any bitcoin connection info, please add either -l, or -u -p -o and -r");
+      networkStates[j] = new NetworkState(new URL(protocol, host, port, path), user, pass, j);
     }
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
@@ -463,8 +480,13 @@ class DiabloMiner {
 
     StringBuilder list = new StringBuilder(networkStates[0].queryUrl.toString());
 
-    for(int i = 1; i < networkStatesCount; i++)
-      list.append(", " + networkStates[i].queryUrl);
+    if(!donate) {
+      for(int i = 1; i < networkStatesCount; i++)
+        list.append(", " + networkStates[i].queryUrl);
+    } else {
+      for(int i = 1; i < networkStatesCount - 1; i++)
+        list.append(", " + networkStates[i].queryUrl);
+    }
 
     info("Connecting to: " + list);
 
@@ -651,9 +673,9 @@ class DiabloMiner {
     int refresh;
     boolean rollNTime;
 
-    NetworkState(URL url, String userPass, int index) {
+    NetworkState(URL url, String user, String pass, int index) {
       this.queryUrl = url;
-      this.userPass = userPass;
+      this.userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim().replace("\r\n", "");
       this.index = index;
       this.refresh = getWorkRefresh;
 
@@ -963,25 +985,38 @@ class DiabloMiner {
             continue;
           }
 
-          if(queueIncoming.get() != null && getWorkParser != null) {
-            GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
-
-            if(getWorkItem.pulled + refresh + 1000 > getNow()) {
-              getWorkParser.getWorkIncoming.push(getWorkItem);
-            } else {
-              getWorkQueue.push(getWorkParser);
-            }
-          } else {
-            if(getWorkParser.networkState.index < networkStatesCount - 1)
-              getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
-            else
+          if(getWorkParser != null) {
+            if(getWorkParser.resetTime < getNow() - 100 * 60 * 1000) {
               getWorkParser.networkState = networkStates[0];
+              getWorkParser.networkState.getWorkAsync.add(getWorkParser);
+              getWorkParser.resetTime = getNow();
+            } else if(donate && getWorkParser.networkState.index == 0 &&
+                  getWorkParser.resetTime < getNow() - 60 * 1000){
+                getWorkParser.networkState = networkStates[1];
+                getWorkParser.networkState.getWorkAsync.add(getWorkParser);
+                getWorkParser.resetTime = getNow();
+            }
 
-            getWorkParser.networkState.getWorkAsync.add(getWorkParser);
+            if(queueIncoming.get() != null) {
+              GetWorkItem getWorkItem = queueIncoming.getAndSet(null);
 
-            try {
-              Thread.sleep(250);
-            } catch (InterruptedException e1) { }
+              if(getWorkItem.pulled + refresh + 1000 > getNow()) {
+                getWorkParser.getWorkIncoming.push(getWorkItem);
+              } else {
+                getWorkQueue.push(getWorkParser);
+              }
+            } else {
+              if(getWorkParser.networkState.index < networkStatesCount - 1)
+                getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
+              else
+                getWorkParser.networkState = networkStates[0];
+
+              getWorkParser.networkState.getWorkAsync.add(getWorkParser);
+
+              try {
+                Thread.sleep(250);
+              } catch (InterruptedException e1) { }
+            }
           }
         }
       }
@@ -1518,8 +1553,9 @@ class DiabloMiner {
         boolean rollNTime = false;
         int rolledNTime = 0;
 
-        NetworkState networkState = networkStates[new Random().nextInt(networkStatesCount)];
+        NetworkState networkState = networkStates[0];
         LinkedBlockingDeque<GetWorkItem> getWorkIncoming = new LinkedBlockingDeque<GetWorkItem>();
+        long resetTime;
 
         GetWorkParser() {
           getWork(false, true);
