@@ -1007,7 +1007,7 @@ class DiabloMiner {
               }
             } else {
               if(getWorkParser.networkState.index < networkStatesCount - 1)
-                getWorkParser.networkState = networkStates[getWorkParser.networkState.index++];
+                getWorkParser.networkState = networkStates[getWorkParser.networkState.index + 1];
               else
                 getWorkParser.networkState = networkStates[0];
 
