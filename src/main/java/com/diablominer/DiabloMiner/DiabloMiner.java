@@ -247,8 +247,14 @@ class DiabloMiner {
     if(line.hasOption("devices")){
       String devices[] = line.getOptionValue("devices").split(",");
       enabledDevices = new HashSet<String>();
-      for(String s : devices)
+      for(String s : devices) {
         enabledDevices.add(s);
+
+        if(Integer.parseInt(s) == 0) {
+          error("Do not use 0 with -D, devices start at 1");
+          System.exit(-1);
+        }
+      }
     }
 
     if(line.hasOption("proxy")) {
@@ -308,6 +314,7 @@ class DiabloMiner {
 
     if(networkStatesCount == 0) {
       error("You forgot to give any bitcoin connection info, please add either -l, or -u -p -o and -r");
+      System.exit(-1);
     }
 
     int j = 0;
