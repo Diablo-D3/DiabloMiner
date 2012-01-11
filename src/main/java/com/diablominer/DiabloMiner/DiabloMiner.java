@@ -1,6 +1,6 @@
 /*
  *  DiabloMiner - OpenCL miner for BitCoin
- *  Copyright (C) 2010, 2011 Patrick McFarland <diablod3@gmail.com>
+ *  Copyright (C) 2010, 2011, 2012 Patrick McFarland <diablod3@gmail.com>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -99,15 +99,11 @@ class DiabloMiner {
 
   double targetFPS = 30.0;
   double targetFPSBasis;
-  long maxWorkSize;
 
   int forceWorkSize = 0;
   int zloops = 1;
-  int vectors = 1;
-  int vectorWidth;
-  boolean xvectors = false;
-  boolean yvectors = false;
-  boolean zvectors = false;
+  int vectors[];
+  int totalVectors = 0;
 
   String source;
 
@@ -127,8 +123,8 @@ class DiabloMiner {
   AtomicLong currentHWErrors = new AtomicLong(0);
   Set<String> enabledDevices = null;
 
-  final static String UPPER[] = { "X", "Y", "Z", "W", "T", "A", "B", "C" };
-  final static String LOWER[] = { "x", "y", "z", "w", "t", "a", "b", "c" };
+  final static String UPPER[] = { "X", "Y", "Z", "W", "T", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "k" };
+  final static String LOWER[] = { "x", "y", "z", "w", "t", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k" };
   final static String CLEAR = "                                                                             ";
 
   public static void main(String [] args) throws Exception {
@@ -187,8 +183,14 @@ class DiabloMiner {
       return;
     }
 
-    if(line.hasOption("fps"))
+    if(line.hasOption("fps")) {
       targetFPS = Float.parseFloat(line.getOptionValue("fps"));
+
+      if(targetFPS < 0.01) {
+        error("--fps argument is too low, adjusting to 0.01");
+        targetFPS = 0.01;
+      }
+    }
 
     if(line.hasOption("worksize"))
       forceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
@@ -214,34 +216,41 @@ class DiabloMiner {
       donate = true;
 
     if(line.hasOption("vectors")) {
-      vectors = Integer.parseInt(line.getOptionValue("vectors"));
+      String tempVectors[] = line.getOptionValue("vectors").split(",");
 
-      if(!((vectors >= 1 && vectors <= 6) ||
-           (vectors >= 17 && vectors <= 24) ||
-           (vectors >= 33 && vectors <= 44)))
-        throw new ParseException("Only 1 through 6, 17 through 24, 33 through 44 are valid for vectors");
+      vectors = new int[tempVectors.length];
 
-      if(vectors == 2  || vectors == 3  || vectors == 4  || vectors == 5  || vectors == 6 ||
-         vectors >= 36)
-        xvectors = true;
+      try {
+        for(int i = 0; i < vectors.length; i++) {
+          vectors[i] = Integer.parseInt(tempVectors[i]);
+          totalVectors += vectors[i];
 
-      if(vectors == 4  || vectors == 5  || vectors == 6 ||
-         vectors >= 40)
-        yvectors = true;
+          if(vectors[i] > 16) {
+            error("DiabloMiner now uses comma-seperated vector layouts, use those instead");
+            System.exit(-1);
+          } else if(vectors[i] != 1 &&
+                    vectors[i] != 2 &&
+                    vectors[i] != 3 &&
+                    vectors[i] != 4 &&
+                    vectors[i] != 8 &&
+                    vectors[i] != 16) {
+            error(vectors[i] + " is not a vector length of 1, 2, 3, 4, 8, or 16");
+            System.exit(-1);
+          }
+        }
 
-      if(vectors == 6 ||
-         vectors >= 44)
-        zvectors = true;
-
-      if(vectors > 32) {
-        vectors -= 32;
-        vectorWidth = 4;
-      } else if(vectors > 16) {
-        vectors -= 16;
-        vectorWidth = 1;
-      } else {
-        vectorWidth = 2;
+        if(totalVectors > 16) {
+          error("DiabloMiner does not support more than 16 total vectors yet");
+          System.exit(-1);
+        }
+      } catch(NumberFormatException e) {
+        error("Cannot parse --vector argument(s)");
+        System.exit(-1);
       }
+    } else {
+      vectors = new int[1];
+      vectors[0] = 1;
+      totalVectors = 1;
     }
 
     if(line.hasOption("devices")){
@@ -406,18 +415,8 @@ class DiabloMiner {
 
     String sourceLines[] = source.split("\n");
     source = "";
-    long vectorOffset = (TWO32 / vectors);
+    long vectorOffset = (TWO32 / totalVectors);
     long vectorBase = 0;
-    long actualVectors = vectors;
-
-    if(xvectors)
-      actualVectors -= vectorWidth - 1;
-
-    if(yvectors)
-      actualVectors -= vectorWidth - 1;
-
-    if(zvectors)
-      actualVectors -= vectorWidth - 1;
 
     for(int x = 0; x < sourceLines.length; x++) {
       String sourceLine = sourceLines[x];
@@ -428,24 +427,33 @@ class DiabloMiner {
          sourceLine = sourceLine.replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
        }
 
-       for(int y = 0; y < actualVectors; y++) {
+       for(int y = 0; y < vectors.length; y++) {
          String replace = sourceLine;
 
-         if((y == 0 && xvectors == true) ||
-            (y == 1 && yvectors == true) ||
-            (y == 2 && zvectors == true)) {
+         if(vectors[y] > 0) {
             if(replace.contains("typedef")) {
-              if(vectorWidth == 2)
-                replace = replace.replace("uint", "uint2");
-              else if(vectorWidth == 4)
-                replace = replace.replace("uint", "uint4");
+              if(vectors[y] > 1)
+                replace = replace.replace("uint", "uint" + vectors[y]);
             } else if(replace.contains("global")) {
-              if(vectorWidth == 2) {
-                replace = replace.replace(";", " + (uint2)(" + vectorBase + ", " + (vectorBase + vectorOffset) + ");");
-                vectorBase += vectorOffset * 2;
-              } else if(vectorWidth == 4) {
-                replace = replace.replace(";", " + (uint4)(" + vectorBase + ", " + (vectorBase + vectorOffset) +  ", " + (vectorBase + vectorOffset * 2) +  ", " + (vectorBase + vectorOffset * 3) + ");");
-                vectorBase += vectorOffset * 4;
+              if(vectors[y] > 0) {
+                String vectorGlobal;
+                if(vectors[y] > 1)
+                  vectorGlobal = " + (uint" + vectors[y] + ")(";
+                else
+                  vectorGlobal = " + (uint)(";
+
+                for(int i = 0; i < vectors[y]; i++) {
+                  vectorGlobal += Long.toString((vectorBase + vectorOffset * i));
+
+                  if(i != vectors[y] - 1)
+                    vectorGlobal += ", ";
+                }
+
+                vectorGlobal += ");";
+
+                replace = replace.replace(";", vectorGlobal);
+
+                vectorBase += vectorOffset * vectors[y];
               }
             } else if(sourceLine.contains("output[")) {
               String lastVar;
@@ -457,8 +465,12 @@ class DiabloMiner {
 
               String end = "";
 
-              for(int i = 0; i < vectorWidth; i++)
-                end += replace.replace(lastVar, lastVar + ".s" + i).replaceAll("nonce", "nonce.s" + i) + "\n";
+              if(vectors[y] > 1) {
+                for(int i = 0; i < vectors[y]; i++)
+                  end += replace.replace(lastVar, lastVar + ".s" + i).replaceAll("nonce", "nonce.s" + i) + "\n";
+              } else {
+                end += replace;
+              }
 
               replace = end;
             }
@@ -481,7 +493,6 @@ class DiabloMiner {
     }
 
     targetFPSBasis = 1000.0 / (targetFPS * EXECUTION_TOTAL);
-    maxWorkSize = TWO32 / zloops / vectors;
 
     info("Started");
 
@@ -1342,8 +1353,8 @@ class DiabloMiner {
 
         if(workSize < workSizeBase)
           workSize = workSizeBase;
-        else if(workSize > maxWorkSize)
-          workSize = maxWorkSize;
+        else if(workSize > TWO32 / zloops / totalVectors - 1)
+          workSize = TWO32 / zloops / totalVectors - 1;
 
         lastRuns = currentRuns;
         lastTime = now;
@@ -1466,7 +1477,7 @@ class DiabloMiner {
           bufferIndex = (bufferIndex == 0) ? 1 : 0;
 
           workSizeTemp.put(0, workSize);
-          currentWork.update(workSizeTemp.get(0) * loops * vectors);
+          currentWork.update(workSizeTemp.get(0) * loops * totalVectors);
 
           System.arraycopy(currentWork.midstate, 0, midstate2, 0, 8);
 
@@ -1507,7 +1518,7 @@ class DiabloMiner {
                 .setArg(11, midstate2[5])
                 .setArg(12, midstate2[6])
                 .setArg(13, midstate2[7])
-                .setArg(14, (int)(currentWork.base / loops / vectors))
+                .setArg(14, (int)(currentWork.base / loops / totalVectors))
                 .setArg(15, W16)
                 .setArg(16, W17)
                 .setArg(17, W18)
@@ -1537,7 +1548,7 @@ class DiabloMiner {
                 error("Failed to queue read buffer, error " + err);
             }
 
-            long increment = workSizeTemp.get(0) * loops * vectors;
+            long increment = workSizeTemp.get(0) * loops * totalVectors;
 
             hashCount.addAndGet(increment);
             deviceHashCount.addAndGet(increment);
