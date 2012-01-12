@@ -94,6 +94,7 @@ class DiabloMiner {
   boolean hwcheck = true;
   boolean debug = false;
   boolean edebug = false;
+  boolean debugtimer = false;
   boolean array = false;
   boolean donate = false;
 
@@ -163,6 +164,7 @@ class DiabloMiner {
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("ds", "ksource", false, "output kernel source and quit");
+    options.addOption("dt", "debugtimer", false, "run for 1 minute and quit");
     options.addOption("b", "donate", false, "donate BTC to DiabloMiner development");
     options.addOption("h", "help", false, "this help");
 
@@ -206,6 +208,10 @@ class DiabloMiner {
     if(line.hasOption("edebug")) {
       debug = true;
       edebug = true;
+    }
+
+    if(line.hasOption("debugtimer")) {
+      debugtimer = true;
     }
 
     if(line.hasOption("loops"))
@@ -605,6 +611,12 @@ class DiabloMiner {
         previousHashCount = currentHashCount;
         previousAdjustedHashCount = adjustedHashCount;
         previousAdjustedStartTime = now - 1;
+      }
+
+      if(debugtimer && getNow() > startTime + 60 * 1000) {
+        System.out.print("\n");
+        info("Debug timer is up, quitting...");
+        System.exit(0);
       }
 
       try {
