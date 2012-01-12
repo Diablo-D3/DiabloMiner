@@ -549,7 +549,11 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZF[2] = ZA[1] + ZH[0] + K[59] + ZR15(ZH[1]) + ZR25(ZA[3]) + ZA[2] + ZC[2] + ZCh(ZE[2], ZB[2], ZF[1]) + ZR26(ZE[2]);
     ZG[2] = ZG[1] + ZF[1] + ZR26(ZF[2]) + ZCh(ZF[2], ZE[2], ZB[2]) + ZR15(ZD[2]) + ZH[2] + ZR25(ZH[3]) + ZA[3];
 
-    if(ZG[2] == 0x136032ED) { output[Znonce & 0xF] = Znonce; }
+    #ifdef VSTORE
+      z Zmask = convert_uint(ZG[2] == 0x136032EDU); z Zshuffle = shuffle(ZG[2], Zmask); if(Zshuffle.s0 == 0x136032EDU) { vstore(Znonce, 0, output); }    
+    #else
+      if(ZG[2] == 0x136032EDU) { output[Znonce & 0xF] = Znonce; }
+    #endif
 #ifdef DOLOOPS
   }
 #endif

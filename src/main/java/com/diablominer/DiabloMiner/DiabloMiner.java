@@ -104,6 +104,7 @@ class DiabloMiner {
   int zloops = 1;
   int vectors[];
   int totalVectors = 0;
+  boolean vstore = false;
 
   String source;
 
@@ -158,6 +159,7 @@ class DiabloMiner {
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("z", "loops", true, "kernel loops (PoT exp, 0 is off)");
     options.addOption("v", "vectors", true, "vector size in kernel");
+    options.addOption("vs", "vstore", false, "use vstore instead of array set");
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("ds", "ksource", false, "output kernel source and quit");
@@ -239,7 +241,7 @@ class DiabloMiner {
           }
         }
 
-        if(totalVectors > 16) {
+        if(vectors.length > 16) {
           error("DiabloMiner does not support more than 16 total vectors yet");
           System.exit(-1);
         }
@@ -253,7 +255,11 @@ class DiabloMiner {
       totalVectors = 1;
     }
 
-    if(line.hasOption("devices")){
+    if(line.hasOption("vstore")) {
+      vstore = true;
+    }
+
+    if(line.hasOption("devices")) {
       String devices[] = line.getOptionValue("devices").split(",");
       enabledDevices = new HashSet<String>();
       for(String s : devices) {
@@ -422,11 +428,6 @@ class DiabloMiner {
       String sourceLine = sourceLines[x];
 
       if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__")) {
-       if(!array) {
-         sourceLine = sourceLine.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13");
-         sourceLine = sourceLine.replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
-       }
-
        for(int y = 0; y < vectors.length; y++) {
          String replace = sourceLine;
 
@@ -456,23 +457,23 @@ class DiabloMiner {
                 vectorBase += vectorOffset * vectors[y];
               }
             } else if(sourceLine.contains("output[")) {
-              String lastVar;
-
-              if(array)
-                lastVar = "ZG[2]";
-              else
-                lastVar = "ZG2";
-
               String end = "";
 
               if(vectors[y] > 1) {
                 for(int i = 0; i < vectors[y]; i++)
-                  end += replace.replace(lastVar, lastVar + ".s" + i).replaceAll("nonce", "nonce.s" + i) + "\n";
+                  end += replace.replace("ZG[2]", "ZG[2].s" + Integer.toHexString(i)).replaceAll("nonce", "nonce.s" + Integer.toHexString(i)) + "\n";
               } else {
                 end += replace;
               }
 
               replace = end;
+            } else if(sourceLine.contains("shuffle")){
+              if(vectors[y] > 1) {
+                replace = replace.replaceAll("uint", "uint" + vectors[y]).replaceAll("s0", "s" + Integer.toHexString((vectors[y] - 1)))
+                                 .replaceAll("vstore", "vstore" + vectors[y]);
+              } else {
+                replace = sourceLines[x + 2];
+              }
             }
           } else {
             if(replace.contains("global")) {
@@ -481,10 +482,16 @@ class DiabloMiner {
             }
           }
 
+          if(!array) {
+            replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
+                             .replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
+          }
+
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
-      } else
+      } else {
         source += sourceLine + "\n";
+      }
     }
 
     if(line.hasOption("ds")) {
@@ -1210,6 +1217,10 @@ class DiabloMiner {
         compileOptions += " -D LOOPS=" + loops;
       }
 
+      if(vstore) {
+        compileOptions += " -D VSTORE";
+      }
+
       program = CL10.clCreateProgramWithSource(context, source, null);
 
       err = CL10.clBuildProgram(program, device, compileOptions, null);
@@ -1417,6 +1428,8 @@ class DiabloMiner {
           resetBuffer = false;
 
           if(skip == false) {
+            boolean hwError = false;
+
             for(int z = 0; z < OUTPUTS; z++) {
               int nonce = buffer[bufferIndex].getInt(z * 4);
 
@@ -1440,22 +1453,26 @@ class DiabloMiner {
                       ((long)(0xFF & digestOutput[29]) << 8)  |
                       ((long)(0xFF & digestOutput[28]));
 
-                edebug("Attempt " + currentAttempts.incrementAndGet() + " from " + deviceName);
+                if(H == 0) {
+                  edebug("Attempt " + currentAttempts.incrementAndGet() + " from " + deviceName);
 
-                if(currentWork.target[7] != 0 || G <= currentWork.target[6]) {
-                  if(H == 0) {
+                  if(currentWork.target[7] != 0 || G <= currentWork.target[6]) {
                     currentWork.sendWork(nonce);
                     submittedBlock = true;
-                  } else {
-                    if(hwcheck)
-                      error("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
-                    else
-                      edebug("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
                   }
+                } else {
+                  hwError = true;
                 }
 
                 resetBuffer = true;
               }
+            }
+
+            if(hwError && submittedBlock == false) {
+              if(hwcheck)
+                error("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
+              else
+                edebug("Invalid solution " + currentHWErrors.incrementAndGet() + " from " + deviceName + ", possible driver or hardware issue");
             }
 
             if(resetBuffer) {
