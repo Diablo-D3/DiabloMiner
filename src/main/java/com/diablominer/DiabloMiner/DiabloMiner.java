@@ -708,7 +708,9 @@ class DiabloMiner {
     final SendWorkAsync sendWorkAsync = this.new SendWorkAsync();
     LongPollAsync longPollAsync = null;
     int refresh;
-    boolean rollNTime;
+    boolean rollNTime = false;
+    boolean noDelay = false;
+    String rejectReason = null;
 
     NetworkState(URL url, String user, String pass, int index) {
       this.queryUrl = url;
@@ -842,7 +844,16 @@ class DiabloMiner {
         String xRejectReason = connection.getHeaderField("X-Reject-Reason");
 
         if(xRejectReason != null && !"".equals(xRejectReason)) {
-          debug("Rejected block because: " + xRejectReason);
+          rejectReason = xRejectReason;
+        }
+
+        String xIsP2Pool = connection.getHeaderField("X-Is-P2Pool");
+
+        if(xIsP2Pool != null && !"".equals(xIsP2Pool)) {
+          if(!noDelay)
+            info("P2Pool no delay mode enabled");
+
+          noDelay = true;
         }
 
         if(connection.getContentEncoding() != null) {
@@ -1051,7 +1062,8 @@ class DiabloMiner {
               getWorkParser.networkState.getWorkAsync.add(getWorkParser);
 
               try {
-                Thread.sleep(250);
+                if(!noDelay)
+                  Thread.sleep(250);
               } catch (InterruptedException e1) { }
             }
           }
@@ -1092,6 +1104,11 @@ class DiabloMiner {
                 sendWorkItem.getWork.networkState.getWorkAsync.add(sendWorkItem.getWork);
               }
 
+              if(rejectReason != null) {
+                info("Reject reason: " + rejectReason);
+                rejectReason = null;
+              }
+
               sendWorkItem = null;
             } catch (IOException e) {
               if(!error) {
@@ -1100,8 +1117,9 @@ class DiabloMiner {
               }
 
               try {
-                Thread.sleep(250);
-              } catch (InterruptedException e1) { }
+                if(!noDelay)
+                  Thread.sleep(250);
+              } catch (InterruptedException f) { }
             }
           }
         }
@@ -1126,7 +1144,8 @@ class DiabloMiner {
           forceUpdate();
 
           try {
-            Thread.sleep(250);
+            if(!noDelay)
+              Thread.sleep(250);
           } catch (InterruptedException e) {}
         }
       }

@@ -558,3 +558,6 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
   }
 #endif
 }
+
+// vim: set ft=c
+
