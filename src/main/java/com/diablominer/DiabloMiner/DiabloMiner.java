@@ -490,7 +490,7 @@ class DiabloMiner {
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
       } else if(sourceLine.contains("__global")) {
-        if(vectors[0] > 1)
+        if(vectors[0] > 1 && !vstore)
           source += sourceLine.replaceAll("uint", "uint" + vectors[0]);
         else
           source += sourceLine;
