@@ -474,16 +474,26 @@ class DiabloMiner {
             }
           }
 
+          if(vectors[0] > 1)
+            replace = replace.replaceAll("zz", String.valueOf(vectors[0]));
+          else
+            replace = replace.replaceAll("zz", "");
+
+          if(sourceLine.contains("any") && vectors[0] == 1)
+            replace = replace.replace("any(", "").replace("))", ")");
+
           if(!array) {
-            replace = replace.replaceAll("zz", String.valueOf(vectors[0]))
-                             .replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
+            replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
                              .replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
           }
 
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
       } else if(sourceLine.contains("__global")) {
-        source += sourceLine.replaceAll("uint", "uint" + vectors[0]);
+        if(vectors[0] > 1)
+          source += sourceLine.replaceAll("uint", "uint" + vectors[0]);
+        else
+          source += sourceLine;
       } else {
         source += sourceLine + "\n";
       }
