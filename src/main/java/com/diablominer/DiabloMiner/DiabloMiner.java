@@ -36,6 +36,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Formatter;
 import java.util.List;
@@ -103,7 +105,7 @@ class DiabloMiner {
 
   int forceWorkSize = 0;
   int zloops = 1;
-  int vectors[];
+  Integer vectors[];
   int totalVectors = 0;
   boolean vstore = false;
 
@@ -226,7 +228,7 @@ class DiabloMiner {
     if(line.hasOption("vectors")) {
       String tempVectors[] = line.getOptionValue("vectors").split(",");
 
-      vectors = new int[tempVectors.length];
+      vectors = new Integer[tempVectors.length];
 
       try {
         for(int i = 0; i < vectors.length; i++) {
@@ -251,12 +253,14 @@ class DiabloMiner {
           error("DiabloMiner does not support more than 16 total vectors yet");
           System.exit(-1);
         }
+
+        Arrays.sort(vectors, Collections.reverseOrder());
       } catch(NumberFormatException e) {
         error("Cannot parse --vector argument(s)");
         System.exit(-1);
       }
     } else {
-      vectors = new int[1];
+      vectors = new Integer[1];
       vectors[0] = 1;
       totalVectors = 1;
     }
@@ -462,24 +466,6 @@ class DiabloMiner {
 
                 vectorBase += vectorOffset * vectors[y];
               }
-            } else if(sourceLine.contains("output[")) {
-              String end = "";
-
-              if(vectors[y] > 1) {
-                for(int i = 0; i < vectors[y]; i++)
-                  end += replace.replace("ZG[2]", "ZG[2].s" + Integer.toHexString(i)).replaceAll("nonce", "nonce.s" + Integer.toHexString(i)) + "\n";
-              } else {
-                end += replace;
-              }
-
-              replace = end;
-            } else if(sourceLine.contains("shuffle")){
-              if(vectors[y] > 1) {
-                replace = replace.replaceAll("uint", "uint" + vectors[y]).replaceAll("s0", "s" + Integer.toHexString((vectors[y] - 1)))
-                                 .replaceAll("vstore", "vstore" + vectors[y]);
-              } else {
-                replace = sourceLines[x + 2];
-              }
             }
           } else {
             if(replace.contains("global")) {
@@ -489,12 +475,15 @@ class DiabloMiner {
           }
 
           if(!array) {
-            replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
+            replace = replace.replaceAll("zz", String.valueOf(vectors[0]))
+                             .replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
                              .replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
           }
 
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
+      } else if(sourceLine.contains("__global")) {
+        source += sourceLine.replaceAll("uint", "uint" + vectors[0]);
       } else {
         source += sourceLine + "\n";
       }
@@ -831,11 +820,11 @@ class DiabloMiner {
           String oldHost = queryUrl.getHost();
           JsonNode newHost = mapper.readTree(xSwitchTo);
 
-          queryUrl = new URL(queryUrl.getProtocol(), newHost.get("host").getValueAsText(),
+          queryUrl = new URL(queryUrl.getProtocol(), newHost.get("host").asText(),
                 newHost.get("port").getIntValue(), queryUrl.getPath());
 
           if(longPollUrl != null)
-            longPollUrl = new URL(longPollUrl.getProtocol(), newHost.get("host").getValueAsText(),
+            longPollUrl = new URL(longPollUrl.getProtocol(), newHost.get("host").asText(),
                   newHost.get("port").getIntValue(), longPollUrl.getPath());
 
           info(oldHost + ": Switched to " + queryUrl.getHost());
@@ -917,11 +906,11 @@ class DiabloMiner {
 
             if(responseMessage.get("error") != null) {
               if(responseMessage.get("error").get("message") != null &&
-                    responseMessage.get("error").get("message").getValueAsText() != null) {
-                error = responseMessage.get("error").get("message").getValueAsText().trim();
+                    responseMessage.get("error").get("message").asText() != null) {
+                error = responseMessage.get("error").get("message").asText().trim();
                 e2 = new IOException("Bitcoin returned error message: " + error);
-              } else if(responseMessage.get("error").getValueAsText() != null) {
-                error = responseMessage.get("error").getValueAsText().trim();
+              } else if(responseMessage.get("error").asText() != null) {
+                error = responseMessage.get("error").asText().trim();
 
                 if(!"null".equals(error) && !"".equals(error))
                   e2 = new IOException("Bitcoin returned an error message: " + error);
@@ -947,11 +936,11 @@ class DiabloMiner {
 
       if(responseMessage.get("error") != null) {
         if(responseMessage.get("error").get("message") != null &&
-              responseMessage.get("error").get("message").getValueAsText() != null) {
-          String error = responseMessage.get("error").get("message").getValueAsText().trim();
+              responseMessage.get("error").get("message").asText() != null) {
+          String error = responseMessage.get("error").get("message").asText().trim();
             throw new IOException("Bitcoin returned error message: " + error);
-        } else if(responseMessage.get("error").getValueAsText() != null) {
-          String error = responseMessage.get("error").getValueAsText().trim();
+        } else if(responseMessage.get("error").asText() != null) {
+          String error = responseMessage.get("error").asText().trim();
 
           if(!"null".equals(error) && !"".equals(error))
             throw new IOException("Bitcoin returned error message: " + error);
@@ -1708,9 +1697,9 @@ class DiabloMiner {
         }
 
         void parse(JsonNode responseMessage) {
-          String datas = responseMessage.get("data").getValueAsText();
-          String midstates = responseMessage.get("midstate").getValueAsText();
-          String targets = responseMessage.get("target").getValueAsText();
+          String datas = responseMessage.get("data").asText();
+          String midstates = responseMessage.get("midstate").asText();
+          String targets = responseMessage.get("target").asText();
 
           String parse;
 
