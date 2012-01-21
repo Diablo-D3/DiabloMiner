@@ -438,54 +438,41 @@ class DiabloMiner {
       String sourceLine = sourceLines[x];
 
       if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__")) {
-       for(int y = 0; y < vectors.length; y++) {
-         String replace = sourceLine;
+        for(int y = 0; y < vectors.length; y++) {
+          String replace = sourceLine;
 
-         if(vectors[y] > 0) {
-            if(replace.contains("typedef")) {
-              if(vectors[y] > 1)
-                replace = replace.replace("uint", "uint" + vectors[y]);
-            } else if(replace.contains("global")) {
-              if(vectors[y] > 0) {
-                String vectorGlobal;
-                if(vectors[y] > 1)
-                  vectorGlobal = " + (uint" + vectors[y] + ")(";
-                else
-                  vectorGlobal = " + (uint)(";
+          if(replace.contains("typedef") && vectors[y] > 1) {
+            replace = replace.replace("uint", "uint" + vectors[y]);
+          } else if(replace.contains("global")) {
+            String vectorGlobal;
 
-                for(int i = 0; i < vectors[y]; i++) {
-                  vectorGlobal += Long.toString((vectorBase + vectorOffset * i));
+            if(vectors[y] > 1)
+              vectorGlobal = " + (uint" + vectors[y] + ")(";
+            else
+              vectorGlobal = " + (uint)(";
 
-                  if(i != vectors[y] - 1)
-                    vectorGlobal += ", ";
-                }
+            for(int i = 0; i < vectors[y]; i++) {
+              vectorGlobal += Long.toString((vectorBase + vectorOffset * i));
 
-                vectorGlobal += ");";
-
-                replace = replace.replace(";", vectorGlobal);
-
-                vectorBase += vectorOffset * vectors[y];
-              }
+            if(i != vectors[y] - 1)
+              vectorGlobal += ", ";
             }
-          } else {
-            if(replace.contains("global")) {
-              replace = replace.replace(";", " + " + vectorBase + ";");
-              vectorBase += vectorOffset;
-            }
+
+            vectorGlobal += ");";
+
+            replace = replace.replace(";", vectorGlobal);
+
+            vectorBase += vectorOffset * vectors[y];
+          } else if(replace.contains("zz")) {
+            if(vectors[0] > 1)
+              replace = replace.replaceAll("zz", String.valueOf(vectors[0]));
+            else
+              replace = replace.replaceAll("zz", "").replace("any(", "").replace("))", ")");
           }
 
-          if(vectors[0] > 1)
-            replace = replace.replaceAll("zz", String.valueOf(vectors[0]));
-          else
-            replace = replace.replaceAll("zz", "");
-
-          if(sourceLine.contains("any") && vectors[0] == 1)
-            replace = replace.replace("any(", "").replace("))", ")");
-
-          if(!array) {
+          if(!array)
             replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
                              .replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
-          }
 
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
