@@ -804,6 +804,7 @@ class DiabloMiner {
       }
 
       connection.setRequestProperty("Authorization", userPass);
+      connection.setRequestProperty("Accept", "application/json");
       connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
       connection.setRequestProperty("Content-Type", "application/json");
       connection.setRequestProperty("Cache-Control", "no-cache");
