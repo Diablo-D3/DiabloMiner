@@ -47,6 +47,8 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -98,6 +100,7 @@ class DiabloMiner {
   boolean edebug = false;
   boolean debugtimer = false;
   boolean array = false;
+  boolean altArray = false;
   boolean donate = false;
 
   double targetFPS = 30.0;
@@ -150,6 +153,7 @@ class DiabloMiner {
 
     Options options = new Options();
     options.addOption("a", "array", false, "use arrays to force register layout");
+    options.addOption("aa", "altarray", false, "use alternate array layout");
     options.addOption("u", "user", true, "bitcoin host username");
     options.addOption("p", "pass", true, "bitcoin host password");
     options.addOption("f", "fps", true, "target execution timing");
@@ -221,6 +225,14 @@ class DiabloMiner {
 
     if(line.hasOption("array"))
       array = true;
+
+    if(line.hasOption("altarray"))
+      altArray = true;
+
+    if(array && altArray) {
+      error("Cannot use array and altarray at the same time");
+      System.exit(-1);
+    }
 
     if(line.hasOption("donate"))
       donate = true;
@@ -464,23 +476,76 @@ class DiabloMiner {
 
             vectorBase += vectorOffset * vectors[y];
           } else if(replace.contains("zz")) {
-            if(vectors[0] > 1)
+            if(vectors[0] > 1) {
               replace = replace.replaceAll("zz", String.valueOf(vectors[0]));
-            else
-              replace = replace.replaceAll("zz", "").replace("any(", "").replace("))", ")");
+            } else {
+              if(replace.contains("vstore"))
+                replace = sourceLines[x + 2];
+
+              replace = replace.replaceAll("zz", "");
+            }
           }
 
-          if(!array)
+          if(vectors[0] == 1 && replace.contains("any"))
+            replace = replace.replace("any(", "").replace("])", "]");
+
+          if(altArray && vectors[y] < 3) {
+            if(vectors[y] == 1) {
+              replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "uint4 Z$1");
+              replace = replace.replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1.s$2");
+            } else {
+              replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "uint4 Z$10; uint4 Z$11");
+
+              StringBuffer sb = new StringBuffer();
+              Pattern p = Pattern.compile("Z([A-Z])\\[([0-9])\\]");
+              Matcher m = p.matcher(replace);
+              while(m.find()) {
+                int index = Integer.parseInt(m.group(2));
+
+                if(index % 2 == 0)
+                  m.appendReplacement(sb, "Z$1" + (index / 2) + ".hi");
+                else
+                  m.appendReplacement(sb, "Z$1" + (index / 2) + ".lo");
+              }
+
+              m.appendTail(sb);
+              replace = sb.toString();
+            }
+          } else if(!array) {
             replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
                              .replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
+          }
+
+          if((replace.contains("C[") || replace.contains("K[")) && altArray) {
+            StringBuffer sb = new StringBuffer();
+            Pattern p = Pattern.compile("([C, K])\\[([0-9]+)\\]");
+            Matcher m = p.matcher(replace);
+            while(m.find()) {
+              int index = Integer.parseInt(m.group(2));
+              m.appendReplacement(sb, "$1[" + (index / 4) + "].s" + (index % 4));
+            }
+
+            m.appendTail(sb);
+            replace = sb.toString();
+          }
 
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
       } else if(sourceLine.contains("__global")) {
         if(vectors[0] > 1 && !vstore)
-          source += sourceLine.replaceAll("uint", "uint" + vectors[0]);
+          source += sourceLine.replaceAll("uint", "uint" + vectors[0]) + "\n";
         else
-          source += sourceLine;
+          source += sourceLine + "\n";
+      } else if((sourceLine.contains("C[16]") || sourceLine.contains("K[64]")) && altArray) {
+        source += sourceLine.replace("uint", "uint4").replace("16", "4").replace("64", "16") + "\n";
+
+        int y = 1;
+        while(!sourceLines[x + y].contains("}")) {
+          sourceLines[x + y] = sourceLines[x + y].replace("  ", "  (uint4)(").replaceAll(",$", "),");
+          y++;
+        }
+
+        sourceLines[x + y - 1] += ")";
       } else {
         source += sourceLine + "\n";
       }
@@ -532,11 +597,14 @@ class DiabloMiner {
       if(devices == null || devices.isEmpty())
         error("OpenCL platform " + platform.getInfoString(CL10.CL_PLATFORM_NAME).trim() + " contains no devices");
 
-      for (CLDevice device : devices) {
-        if(enabledDevices == null || enabledDevices.contains(platformCount + "." + count) || enabledDevices.contains(Integer.toString(count)))
-          deviceStates.add(this.new DeviceState(platform, device, count));
-        count++;
+      if(devices != null) {
+        for(CLDevice device : devices) {
+          if(enabledDevices == null || enabledDevices.contains(platformCount + "." + count) || enabledDevices.contains(Integer.toString(count)))
+            deviceStates.add(this.new DeviceState(platform, device, count));
+          count++;
+        }
       }
+
       platformCount++;
     }
 

@@ -40,14 +40,29 @@ typedef uint z;
 #define ZR30(n) ((Zrotr((n), 30) ^ Zrotr((n), 19) ^ Zrotr((n), 10)))
 
 __constant uint K[64] = {
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+  0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+  0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+  0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+  0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+  0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+};
+
+__constant uint C[16] = {
+  0x80000000U, 0x00000100U, 0x00000280U, 0x00A00055U,
+  0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0x98c7e2a2U,
+  0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0xfc08884dU,
+  0x136032EDU, 0x90bb1e3cU, 0x50c6645bU, 0x3ac42e24U
 };
 
 __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
@@ -88,9 +103,9 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
 
     ZC[0] = W18 + ZR25Con(Znonce);
     ZD[0] = W19 + Znonce;
-    ZE[0] = 0x80000000U + ZR15(ZC[0]);
+    ZE[0] = C[0] + ZR15(ZC[0]);
     ZF[0] = ZR15(ZD[0]);
-    ZG[0] = 0x00000280U + ZR15(ZE[0]);
+    ZG[0] = C[2] + ZR15(ZE[0]);
     ZH[0] = ZR15(ZF[0]) + W16;
     ZA[1] = ZR15(ZG[0]) + W17;
     ZB[1] = ZR15(ZH[0]) + ZC[0];
@@ -98,7 +113,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZD[1] = ZR15(ZB[1]) + ZE[0];
     ZE[1] = ZR15(ZC[1]) + ZF[0];
     ZF[1] = ZR15(ZD[1]) + ZG[0];
-    ZG[1] = 0x00A00055U + ZR15(ZE[1]) + ZH[0];
+    ZG[1] = C[3] + ZR15(ZE[1]) + ZH[0];
     ZH[1] = W31 + ZR15(ZF[1]) + ZA[1];
     ZA[2] = W32 + ZR15(ZG[1]) + ZB[1];
 
@@ -135,7 +150,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZG[3] = ZD[2] + K[14] + ZCh(ZE[3], ZB[3], ZG[2]) + ZR26(ZE[3]);
     ZH[3] = ZE[2] + ZG[3];
     ZA[0] = ZG[3] + ZR30(ZF[3]) + ZMa(ZC[3], ZH[2], ZF[3]);
-    ZB[0] = ZG[2] + K[15] + 0x00000280U + ZCh(ZH[3], ZE[3], ZB[3]) + ZR26(ZH[3]);
+    ZB[0] = ZG[2] + K[15] + C[2] + ZCh(ZH[3], ZE[3], ZB[3]) + ZR26(ZH[3]);
     ZB[2] = ZH[2] + ZB[0];
     ZC[2] = ZB[0] + ZR30(ZA[0]) + ZMa(ZF[3], ZC[3], ZA[0]);
     ZD[2] = ZB[3] + K[16] + W16 + ZCh(ZB[2], ZH[3], ZE[3]) + ZR26(ZB[2]);
@@ -323,26 +338,26 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZG[3] = state6 + ZF[1];
     ZH[3] = state7 + ZH[0];
 
-    ZA[0] = 0x6a09e667U;
-    ZB[0] = 0xbb67ae85U;
-    ZC[0] = 0x3c6ef372U;
-    ZD[0] = 0x98c7e2a2U + ZA[3];
-    ZE[0] = 0x510e527fU;
-    ZF[0] = 0x9b05688cU;
-    ZG[0] = 0x1f83d9abU;
-    ZH[0] = 0xfc08884dU + ZA[3];
+    ZA[0] = C[4];
+    ZB[0] = C[5];
+    ZC[0] = C[6];
+    ZD[0] = C[7] + ZA[3];
+    ZE[0] = C[8];
+    ZF[0] = C[9];
+    ZG[0] = C[10];
+    ZH[0] = C[11] + ZA[3];
 
     ZA[1] = ZR25(ZB[3]) + ZA[3];
 
-    ZB[1] = ZG[0] + K[1] + ZB[3] + ZCh(ZD[0], ZE[0], ZF[0]) + ZR26(ZD[0]);
+    ZB[1] = C[13] + ZB[3] + ZCh(ZD[0], ZE[0], ZF[0]) + ZR26(ZD[0]);
     ZC[1] = ZC[0] + ZB[1];
     ZD[1] = ZB[1] + ZR30(ZH[0]) + ZMa(ZA[0], ZB[0], ZH[0]);
-    ZE[1] = ZF[0] + K[2] + ZC[3] + ZCh(ZC[1], ZD[0], ZE[0]) + ZR26(ZC[1]);
+    ZE[1] = C[14] + ZC[3] + ZCh(ZC[1], ZD[0], ZE[0]) + ZR26(ZC[1]);
     ZF[1] = ZB[0] + ZE[1];
     ZG[1] = ZE[1] + ZR30(ZD[1]) + ZMa(ZH[0], ZA[0], ZD[1]);
-    ZH[1] = (Zrotr(0x00000100U, 15) ^ Zrotr(0x00000100U, 13) ^ ((0x00000100U) >> 10U)) + ZR25(ZC[3]) + ZB[3];
+    ZH[1] = (Zrotr(C[1], 15) ^ Zrotr(C[1], 13) ^ ((C[1]) >> 10U)) + ZR25(ZC[3]) + ZB[3];
     ZA[2] = ZR15(ZA[1]) + ZR25(ZD[3]) + ZC[3];
-    ZB[2] = ZE[0] + K[3] + ZD[3] + ZCh(ZF[1], ZC[1], ZD[0]) + ZR26(ZF[1]);
+    ZB[2] = C[15] + ZD[3] + ZCh(ZF[1], ZC[1], ZD[0]) + ZR26(ZF[1]);
     ZC[2] = ZA[0] + ZB[2];
     ZD[2] = ZB[2] + ZR30(ZG[1]) + ZMa(ZD[1], ZH[0], ZG[1]);
     ZE[2] = ZR15(ZH[1]) + ZR25(ZE[3]) + ZD[3];
@@ -357,15 +372,15 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZF[3] = ZF[1] + K[6] + ZG[3] + ZCh(ZC[3], ZG[2], ZC[2]) + ZR26(ZC[3]);
     ZA[0] = ZG[1] + ZF[3];
     ZB[0] = ZF[3] + ZR30(ZD[3]) + ZMa(ZH[2], ZD[2], ZD[3]);
-    ZC[0] = ZR15(ZA[3]) + 0x00000100U + ZR25(ZH[3]) + ZG[3];
+    ZC[0] = ZR15(ZA[3]) + C[1] + ZR25(ZH[3]) + ZG[3];
     ZD[0] = ZC[2] + K[7] + ZH[3] + ZCh(ZA[0], ZC[3], ZG[2]) + ZR26(ZA[0]);
     ZE[0] = ZD[2] + ZD[0];
     ZF[0] = ZD[0] + ZR30(ZB[0]) + ZMa(ZD[3], ZH[2], ZB[0]);
-    ZG[0] = (ZG[2] + K[8] + 0x80000000U + ZCh(ZE[0], ZA[0], ZC[3]) + ZR26(ZE[0]));
+    ZG[0] = (ZG[2] + K[8] + C[0] + ZCh(ZE[0], ZA[0], ZC[3]) + ZR26(ZE[0]));
     ZH[0] = ZH[2] + ZG[0];
     ZB[1] = ZG[0] + ZR30(ZF[0]) + ZMa(ZB[0], ZD[3], ZF[0]);
-    ZC[1] = ZR15(ZE[3]) + ZA[1] + ZR25Con(0x80000000U) + ZH[3];
-    ZD[1] = ZR15(ZC[0]) + ZH[1] + 0x80000000U;
+    ZC[1] = ZR15(ZE[3]) + ZA[1] + ZR25Con(C[0]) + ZH[3];
+    ZD[1] = ZR15(ZC[0]) + ZH[1] + C[0];
     ZE[1] = ZC[3] + K[9] + ZCh(ZH[0], ZE[0], ZA[0]) + ZR26(ZH[0]);
     ZF[1] = ZD[3] + ZE[1];
     ZG[1] = ZE[1] + ZR30(ZB[1]) + ZMa(ZF[0], ZB[0], ZB[1]);
@@ -388,7 +403,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZF[0] = ZC[2] + K[14] + ZCh(ZD[0], ZF[3], ZB[3]) + ZR26(ZD[0]);
     ZG[0] = ZD[2] + ZF[0];
     ZH[0] = ZF[0] + ZR30(ZE[0]) + ZMa(ZG[3], ZC[3], ZE[0]);
-    ZB[1] = ZB[3] + K[15] + 0x00000100U + ZCh(ZG[0], ZD[0], ZF[3]) + ZR26(ZG[0]);
+    ZB[1] = ZB[3] + K[15] + C[1] + ZCh(ZG[0], ZD[0], ZF[3]) + ZR26(ZG[0]);
     ZE[1] = ZC[3] + ZB[1];
     ZF[1] = ZB[1] + ZR30(ZH[0]) + ZMa(ZE[0], ZG[3], ZH[0]);
     ZG[1] = ZF[3] + K[16] + ZA[1] + ZCh(ZE[1], ZG[0], ZD[0]) + ZR26(ZE[1]);
@@ -434,11 +449,11 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZC[2] = ZG[3] + K[29] + ZB[2] + ZCh(ZF[1], ZH[0], ZE[0]) + ZR26(ZF[1]);
     ZD[2] = ZB[0] + ZC[2];
     ZH[2] = ZC[2] + ZR30(ZG[1]) + ZMa(ZB[1], ZF[0], ZG[1]);
-    ZB[3] = ZR15(ZA[0]) + ZR25Con(0x00000100U) + ZC[1];
+    ZB[3] = ZR15(ZA[0]) + ZR25Con(C[1]) + ZC[1];
     ZC[3] = ZE[0] + K[30] + ZB[3] + ZCh(ZD[2], ZF[1], ZH[0]) + ZR26(ZD[2]);
     ZD[3] = ZF[0] + ZC[3];
     ZF[3] = ZC[3] + ZR30(ZH[2]) + ZMa(ZG[1], ZB[1], ZH[2]);
-    ZG[3] = ZR15(ZB[2]) + ZR25(ZA[1]) + ZD[1] + 0x00000100U;
+    ZG[3] = ZR15(ZB[2]) + ZR25(ZA[1]) + ZD[1] + C[1];
     ZB[0] = ZH[0] + K[31] + ZG[3] + ZCh(ZD[3], ZD[2], ZF[1]) + ZR26(ZD[3]);
     ZD[0] = ZB[1] + ZB[0];
     ZE[0] = ZB[0] + ZR30(ZF[3]) + ZMa(ZH[2], ZG[1], ZF[3]);
@@ -549,10 +564,12 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZF[2] = ZA[1] + ZH[0] + K[59] + ZR15(ZH[1]) + ZR25(ZA[3]) + ZA[2] + ZC[2] + ZCh(ZE[2], ZB[2], ZF[1]) + ZR26(ZE[2]);
     ZG[2] = ZG[1] + ZF[1] + ZR26(ZF[2]) + ZCh(ZF[2], ZE[2], ZB[2]) + ZR15(ZD[2]) + ZH[2] + ZR25(ZH[3]) + ZA[3];
 
+    bool io = any(ZG[2] == (z)C[12]);
+
     #ifdef VSTORE
-      if(any(ZG[2] == (z)0x136032EDU)) { vstorezz(Znonce, 0, output); }
+      if(io) { vstorezz(Znonce, 0, output); }
     #else
-      if(any(ZG[2] == (z)0x136032EDU)) { output[0] = (uintzz)Znonce; }
+      if(io) { output[0] = (uintzz)Znonce; }
     #endif
 #ifdef DOLOOPS
   }
