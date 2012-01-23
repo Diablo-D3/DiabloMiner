@@ -536,7 +536,7 @@ class DiabloMiner {
           source += sourceLine.replaceAll("uint", "uint" + vectors[0]) + "\n";
         else
           source += sourceLine + "\n";
-      } else if((sourceLine.contains("C[16]") || sourceLine.contains("K[64]")) && altArray) {
+      } else if((sourceLine.contains("C[24]") || sourceLine.contains("K[64]")) && altArray) {
         source += sourceLine.replace("uint", "uint4").replace("16", "4").replace("64", "16") + "\n";
 
         int y = 1;

@@ -33,7 +33,6 @@ typedef uint z;
 #define ZMa(a, b, c) bitselect((z)a, (z)b, (z)c ^ (z)a)
 #endif
 
-#define ZR25Con(n) ((Zrotr((n), 25) ^ Zrotr((n), 14) ^ ((n) >> 3U)))
 #define ZR25(n) ((Zrotr((n), 25) ^ Zrotr((n), 14) ^ ((n) >> 3U)))
 #define ZR15(n) ((Zrotr((n), 15) ^ Zrotr((n), 13) ^ ((n) >> 10U)))
 #define ZR26(n) ((Zrotr((n), 26) ^ Zrotr((n), 21) ^ Zrotr((n), 7)))
@@ -58,11 +57,13 @@ __constant uint K[64] = {
   0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 };
 
-__constant uint C[16] = {
-  0x80000000U, 0x00000100U, 0x00000280U, 0x00A00055U,
-  0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0x98c7e2a2U,
-  0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0xfc08884dU,
-  0x136032EDU, 0x90bb1e3cU, 0x50c6645bU, 0x3ac42e24U
+__constant uint C[24] = {
+  0x80000000, 0x00000100, 0x00000280, 0x00A00055,
+  0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0x98c7e2a2,
+  0x510e527f, 0x9b05688c, 0x1f83d9ab, 0xfc08884d,
+  0x136032ED, 0x90bb1e3c, 0x50c6645b, 0x3ac42e24,
+  0xc19bf3f4, 0x5807aa98, 0xc19bf274, 0x00a00000,
+  0x11002000, 0x00400022, 0x00000000, 0x00000000
 };
 
 __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
@@ -101,7 +102,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZA[0] = PreVal4_plus_state0 + Znonce;
     ZB[0] = PreVal4_plus_T1 + Znonce;
 
-    ZC[0] = W18 + ZR25Con(Znonce);
+    ZC[0] = W18 + ZR25(Znonce);
     ZD[0] = W19 + Znonce;
     ZE[0] = C[0] + ZR15(ZC[0]);
     ZF[0] = ZR15(ZD[0]);
@@ -150,7 +151,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZG[3] = ZD[2] + K[14] + ZCh(ZE[3], ZB[3], ZG[2]) + ZR26(ZE[3]);
     ZH[3] = ZE[2] + ZG[3];
     ZA[0] = ZG[3] + ZR30(ZF[3]) + ZMa(ZC[3], ZH[2], ZF[3]);
-    ZB[0] = ZG[2] + K[15] + C[2] + ZCh(ZH[3], ZE[3], ZB[3]) + ZR26(ZH[3]);
+    ZB[0] = ZG[2] + C[16] + ZCh(ZH[3], ZE[3], ZB[3]) + ZR26(ZH[3]);
     ZB[2] = ZH[2] + ZB[0];
     ZC[2] = ZB[0] + ZR30(ZA[0]) + ZMa(ZF[3], ZC[3], ZA[0]);
     ZD[2] = ZB[3] + K[16] + W16 + ZCh(ZB[2], ZH[3], ZE[3]) + ZR26(ZB[2]);
@@ -355,7 +356,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZE[1] = C[14] + ZC[3] + ZCh(ZC[1], ZD[0], ZE[0]) + ZR26(ZC[1]);
     ZF[1] = ZB[0] + ZE[1];
     ZG[1] = ZE[1] + ZR30(ZD[1]) + ZMa(ZH[0], ZA[0], ZD[1]);
-    ZH[1] = (Zrotr(C[1], 15) ^ Zrotr(C[1], 13) ^ ((C[1]) >> 10U)) + ZR25(ZC[3]) + ZB[3];
+    ZH[1] = C[19] + ZR25(ZC[3]) + ZB[3];
     ZA[2] = ZR15(ZA[1]) + ZR25(ZD[3]) + ZC[3];
     ZB[2] = C[15] + ZD[3] + ZCh(ZF[1], ZC[1], ZD[0]) + ZR26(ZF[1]);
     ZC[2] = ZA[0] + ZB[2];
@@ -376,10 +377,10 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZD[0] = ZC[2] + K[7] + ZH[3] + ZCh(ZA[0], ZC[3], ZG[2]) + ZR26(ZA[0]);
     ZE[0] = ZD[2] + ZD[0];
     ZF[0] = ZD[0] + ZR30(ZB[0]) + ZMa(ZD[3], ZH[2], ZB[0]);
-    ZG[0] = (ZG[2] + K[8] + C[0] + ZCh(ZE[0], ZA[0], ZC[3]) + ZR26(ZE[0]));
+    ZG[0] = (ZG[2] + C[17] + ZCh(ZE[0], ZA[0], ZC[3]) + ZR26(ZE[0]));
     ZH[0] = ZH[2] + ZG[0];
     ZB[1] = ZG[0] + ZR30(ZF[0]) + ZMa(ZB[0], ZD[3], ZF[0]);
-    ZC[1] = ZR15(ZE[3]) + ZA[1] + ZR25Con(C[0]) + ZH[3];
+    ZC[1] = ZR15(ZE[3]) + ZA[1] + C[20] + ZH[3];
     ZD[1] = ZR15(ZC[0]) + ZH[1] + C[0];
     ZE[1] = ZC[3] + K[9] + ZCh(ZH[0], ZE[0], ZA[0]) + ZR26(ZH[0]);
     ZF[1] = ZD[3] + ZE[1];
@@ -403,7 +404,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZF[0] = ZC[2] + K[14] + ZCh(ZD[0], ZF[3], ZB[3]) + ZR26(ZD[0]);
     ZG[0] = ZD[2] + ZF[0];
     ZH[0] = ZF[0] + ZR30(ZE[0]) + ZMa(ZG[3], ZC[3], ZE[0]);
-    ZB[1] = ZB[3] + K[15] + C[1] + ZCh(ZG[0], ZD[0], ZF[3]) + ZR26(ZG[0]);
+    ZB[1] = ZB[3] + C[18] + ZCh(ZG[0], ZD[0], ZF[3]) + ZR26(ZG[0]);
     ZE[1] = ZC[3] + ZB[1];
     ZF[1] = ZB[1] + ZR30(ZH[0]) + ZMa(ZE[0], ZG[3], ZH[0]);
     ZG[1] = ZF[3] + K[16] + ZA[1] + ZCh(ZE[1], ZG[0], ZD[0]) + ZR26(ZE[1]);
@@ -449,7 +450,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZC[2] = ZG[3] + K[29] + ZB[2] + ZCh(ZF[1], ZH[0], ZE[0]) + ZR26(ZF[1]);
     ZD[2] = ZB[0] + ZC[2];
     ZH[2] = ZC[2] + ZR30(ZG[1]) + ZMa(ZB[1], ZF[0], ZG[1]);
-    ZB[3] = ZR15(ZA[0]) + ZR25Con(C[1]) + ZC[1];
+    ZB[3] = ZR15(ZA[0]) + C[21] + ZC[1];
     ZC[3] = ZE[0] + K[30] + ZB[3] + ZCh(ZD[2], ZF[1], ZH[0]) + ZR26(ZD[2]);
     ZD[3] = ZF[0] + ZC[3];
     ZF[3] = ZC[3] + ZR30(ZH[2]) + ZMa(ZG[1], ZB[1], ZH[2]);
