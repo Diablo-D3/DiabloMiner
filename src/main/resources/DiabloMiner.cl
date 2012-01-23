@@ -564,12 +564,12 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZF[2] = ZA[1] + ZH[0] + K[59] + ZR15(ZH[1]) + ZR25(ZA[3]) + ZA[2] + ZC[2] + ZCh(ZE[2], ZB[2], ZF[1]) + ZR26(ZE[2]);
     ZG[2] = ZG[1] + ZF[1] + ZR26(ZF[2]) + ZCh(ZF[2], ZE[2], ZB[2]) + ZR15(ZD[2]) + ZH[2] + ZR25(ZH[3]) + ZA[3];
 
-    bool io = any(ZG[2] == (z)C[12]);
+    bool ioZ = any(ZG[2] == (z)C[12]);
 
     #ifdef VSTORE
-      if(io) { vstorezz(Znonce, 0, output); }
+      if(ioZ) { vstorezz(Znonce, 0, output); }
     #else
-      if(io) { output[0] = (uintzz)Znonce; }
+      if(ioZ) { output[0] = (uintzz)Znonce; }
     #endif
 #ifdef DOLOOPS
   }

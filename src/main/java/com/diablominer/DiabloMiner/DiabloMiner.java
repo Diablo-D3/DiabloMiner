@@ -639,7 +639,7 @@ class DiabloMiner {
           hashMeterFormatter.format("\rmhash: %.1f/%.1f | accept: %d | reject: %d | hw error: %d",
                 averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
         } else {
-          hashMeterFormatter.format("\rmhash: %.1f/%.1f | a/r/hwe: %d/%d/%d | ghash: ",
+          hashMeterFormatter.format("\rmh: %.1f/%.1f | a/r/hwe: %d/%d/%d | gh: ",
                 averageHashCount, hashLongCount, currentBlocks.get(), currentRejects.get(), currentHWErrors.get());
 
           double basisAverage = 0.0;
