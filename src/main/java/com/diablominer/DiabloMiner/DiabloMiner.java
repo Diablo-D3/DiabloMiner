@@ -529,6 +529,9 @@ class DiabloMiner {
             replace = sb.toString();
           }
 
+          if(replace.contains("any(") && vectors[y] == 1)
+            replace = replace.replace("any(", "").replace(");", ";");
+
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
       } else if(sourceLine.contains("__global")) {
@@ -537,7 +540,7 @@ class DiabloMiner {
         else
           source += sourceLine + "\n";
       } else if((sourceLine.contains("C[24]") || sourceLine.contains("K[64]")) && altArray) {
-        source += sourceLine.replace("uint", "uint4").replace("16", "4").replace("64", "16") + "\n";
+        source += sourceLine.replace("uint", "uint4").replace("24", "6").replace("64", "16") + "\n";
 
         int y = 1;
         while(!sourceLines[x + y].contains("}")) {
