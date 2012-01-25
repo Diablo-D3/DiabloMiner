@@ -455,7 +455,7 @@ class DiabloMiner {
 
           if(replace.contains("typedef") && vectors[y] > 1) {
             replace = replace.replace("uint", "uint" + vectors[y]);
-          } else if(replace.contains("global")) {
+          } else if(replace.contains("z Znonce")) {
             String vectorGlobal;
 
             if(vectors[y] > 1)

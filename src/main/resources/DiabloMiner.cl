@@ -88,17 +88,21 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
   z ZG[4];
   z ZH[4];
 
-  z Znonce = base + get_global_id(0);
+  uint noncebase = base + get_global_id(0);
+
+  #ifdef DOLOOPS
+  noncebase *= LOOPS;
+  #endif
+
+  z Znonce = noncebase;
 
   #ifdef DOLOOPS
   uint i;
-  z Zloopnonce = Znonce * (z)LOOPS;
-  z Ztempout = 0;
+
+  z Zloopout = 0;
 
   for(i = 0; i < LOOPS; i++) {
-    Znonce = Zloopnonce + i;
   #endif
-
     ZA[0] = PreVal4_plus_state0 + Znonce;
     ZB[0] = PreVal4_plus_T1 + Znonce;
 
@@ -568,12 +572,14 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     bool Zio = any(ZG[2] == (z)C[12]);
 
   #ifdef DOLOOPS
-    Ztempout = (Zio) ? Znonce : Ztempout;
+    Zloopout = (Zio) ? Znonce : Zloopout;
+
+    Znonce += (z)1;
   }
 
-  Znonce = Ztempout;
+  Znonce = Zloopout;
 
-  bool Zio = any(Znonce > 0);
+  bool Zio = any(Znonce > (z)0);
   #endif
 
   #ifdef VSTORE
