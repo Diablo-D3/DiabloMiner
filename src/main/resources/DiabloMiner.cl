@@ -317,27 +317,21 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZG[3] = state6 + ZF[1];
     ZH[3] = state7 + ZH[0];
 
-    ZA[0] = 0x6a09e667U;
-    ZB[0] = 0xbb67ae85U;
-    ZC[0] = 0x3c6ef372U;
     ZD[0] = 0x98c7e2a2U + ZA[3];
-    ZE[0] = 0x510e527fU;
-    ZF[0] = 0x9b05688cU;
-    ZG[0] = 0x1f83d9abU;
     ZH[0] = 0xfc08884dU + ZA[3];
 
     ZA[1] = ZR25(ZB[3]) + ZA[3];
 
-    ZB[1] = 0x90bb1e3cU + ZB[3] + ZCh(ZD[0], ZE[0], ZF[0]) + ZR26(ZD[0]);
-    ZC[1] = ZC[0] + ZB[1];
-    ZD[1] = ZB[1] + ZR30(ZH[0]) + ZMa(ZA[0], ZB[0], ZH[0]);
-    ZE[1] = 0x50c6645bU + ZC[3] + ZCh(ZC[1], ZD[0], ZE[0]) + ZR26(ZC[1]);
-    ZF[1] = ZB[0] + ZE[1];
-    ZG[1] = ZE[1] + ZR30(ZD[1]) + ZMa(ZH[0], ZA[0], ZD[1]);
+    ZB[1] = 0x90bb1e3cU + ZB[3] + ZCh(ZD[0], 0x510e527fU, 0x9b05688cU) + ZR26(ZD[0]);
+    ZC[1] = 0x3c6ef372U + ZB[1];
+    ZD[1] = ZB[1] + ZR30(ZH[0]) + ZMa(0x6a09e667U, 0xbb67ae85U, ZH[0]);
+    ZE[1] = 0x50c6645bU + ZC[3] + ZCh(ZC[1], ZD[0], 0x510e527fU) + ZR26(ZC[1]);
+    ZF[1] = 0xbb67ae85U + ZE[1];
+    ZG[1] = ZE[1] + ZR30(ZD[1]) + ZMa(ZH[0], 0x6a09e667U, ZD[1]);
     ZH[1] = 0x00a00000U + ZR25(ZC[3]) + ZB[3];
     ZA[2] = ZR15(ZA[1]) + ZR25(ZD[3]) + ZC[3];
     ZB[2] = 0x3ac42e24U + ZD[3] + ZCh(ZF[1], ZC[1], ZD[0]) + ZR26(ZF[1]);
-    ZC[2] = ZA[0] + ZB[2];
+    ZC[2] = 0x6a09e667U + ZB[2];
     ZD[2] = ZB[2] + ZR30(ZG[1]) + ZMa(ZD[1], ZH[0], ZG[1]);
     ZE[2] = ZR15(ZH[1]) + ZR25(ZE[3]) + ZD[3];
     ZF[2] = ZD[0] + 0x3956c25bU + ZE[3] + ZCh(ZC[2], ZF[1], ZC[1]) + ZR26(ZC[2]);
@@ -349,6 +343,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZD[3] = ZB[3] + ZR30(ZH[2]) + ZMa(ZD[2], ZG[1], ZH[2]);
     ZE[3] = ZR15(ZE[2]) + ZR25(ZG[3]) + ZF[3];
     ZF[3] = ZF[1] + 0x923f82a4U + ZG[3] + ZCh(ZC[3], ZG[2], ZC[2]) + ZR26(ZC[3]);
+
     ZA[0] = ZG[1] + ZF[3];
     ZB[0] = ZF[3] + ZR30(ZD[3]) + ZMa(ZH[2], ZD[2], ZD[3]);
     ZC[0] = ZR15(ZA[3]) + 0x00000100U + ZR25(ZH[3]) + ZG[3];
