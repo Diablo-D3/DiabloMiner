@@ -566,6 +566,8 @@ class DiabloMiner {
 
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
+      } else if(totalVectors == 1 && sourceLine.contains("any(nonce")) {
+        source += sourceLine.replace("any", "") + "\n";
       } else if(sourceLine.contains("__global")) {
         if(totalVectors > 1)
           source += sourceLine.replaceAll("uint", "uint" + totalVectors) + "\n";
