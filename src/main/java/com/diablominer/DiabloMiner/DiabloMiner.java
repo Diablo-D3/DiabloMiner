@@ -261,10 +261,15 @@ class DiabloMiner {
           }
         }
 
-        if(vectors.length > 16) {
+        if(totalVectors > 16) {
           error("DiabloMiner does not support more than 16 total vectors yet");
           System.exit(-1);
         }
+
+        int powtwo = 1 << (32 - Integer.numberOfLeadingZeros(totalVectors) - 1);
+
+        if(totalVectors != powtwo)
+          totalVectors = 1 << (32 - Integer.numberOfLeadingZeros(totalVectors));
 
         Arrays.sort(vectors, Collections.reverseOrder());
       } catch(NumberFormatException e) {
@@ -449,11 +454,41 @@ class DiabloMiner {
     for(int x = 0; x < sourceLines.length; x++) {
       String sourceLine = sourceLines[x];
 
-      if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__")) {
+      if(sourceLine.contains("zz")) {
+        if(totalVectors > 1)
+          sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectors));
+        else
+          sourceLine = sourceLine.replaceAll("zz", "");
+      }
+
+      if(sourceLine.contains("nonce = Znonce")) {
+        int count = 0;
+        sourceLine = "    nonce = (uintzz)(";
+
+        for(int z = 0; z < vectors.length; z++) {
+          sourceLine += UPPER[z] + "nonce";
+          count += vectors[z];
+
+          if(z != vectors.length - 1)
+            sourceLine += ", ";
+        }
+
+        for(int z = 0; z < totalVectors - count; z++)
+          sourceLine += ", 0";
+
+        sourceLine += ");";
+
+        if(totalVectors > 1)
+          sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectors));
+        else
+          sourceLine = sourceLine.replaceAll("zz", "");
+
+        source += sourceLine + "\n";
+      } else if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__")) {
         for(int y = 0; y < vectors.length; y++) {
           String replace = sourceLine;
 
-          if(replace.contains("typedef") && vectors[y] > 1) {
+          if(vectors[y] > 1 && replace.contains("typedef")) {
             replace = replace.replace("uint", "uint" + vectors[y]);
           } else if(replace.contains("z Znonce")) {
             String vectorGlobal;
@@ -475,19 +510,28 @@ class DiabloMiner {
             replace = replace.replace(";", vectorGlobal);
 
             vectorBase += vectorOffset * vectors[y];
-          } else if(replace.contains("zz")) {
-            if(vectors[0] > 1) {
-              replace = replace.replaceAll("zz", String.valueOf(vectors[0]));
-            } else {
-              if(replace.contains("vstore"))
-                replace = sourceLines[x + 2];
+          } else if(altArray && y % 2 == 1 && replace.contains("+")) {
+            replace = replace.replace(";", "");
 
-              replace = replace.replaceAll("zz", "");
+            String[] split = replace.split("[^+]=");
+
+            if(split.length > 1) {
+              replace = "    " + split[0].trim() + " = ";
+
+              split = split[1].split("\\+");
+
+              for(int z = split.length - 1; z > -1; z--) {
+                replace += split[z].trim();
+
+                if(z != 0)
+                  replace += " + ";
+              }
+
+              replace += ";";
+            } else {
+              replace = replace + ";";
             }
           }
-
-          if(vectors[0] == 1 && replace.contains("any"))
-            replace = replace.replace("any(", "").replace("])", "]");
 
           if(altArray && vectors[y] < 3) {
             if(vectors[y] == 1) {
@@ -516,39 +560,17 @@ class DiabloMiner {
                              .replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
           }
 
-          if((replace.contains("C[") || replace.contains("K[")) && altArray) {
-            StringBuffer sb = new StringBuffer();
-            Pattern p = Pattern.compile("([C, K])\\[([0-9]+)\\]");
-            Matcher m = p.matcher(replace);
-            while(m.find()) {
-              int index = Integer.parseInt(m.group(2));
-              m.appendReplacement(sb, "$1[" + (index / 4) + "].s" + (index % 4));
-            }
-
-            m.appendTail(sb);
-            replace = sb.toString();
+          if(vectors[y] == 1 && replace.contains("bool Zio")) {
+            replace = replace.replace("any(", "(");
           }
-
-          if(replace.contains("any(") && vectors[y] == 1)
-            replace = replace.replace("any(", "").replace(");", ";");
 
           source += replace.replaceAll("Z", UPPER[y]).replaceAll("z", LOWER[y]) + "\n";
         }
       } else if(sourceLine.contains("__global")) {
-        if(vectors[0] > 1 && !vstore)
-          source += sourceLine.replaceAll("uint", "uint" + vectors[0]) + "\n";
+        if(totalVectors > 1)
+          source += sourceLine.replaceAll("uint", "uint" + totalVectors) + "\n";
         else
           source += sourceLine + "\n";
-      } else if((sourceLine.contains("C[24]") || sourceLine.contains("K[64]")) && altArray) {
-        source += sourceLine.replace("uint", "uint4").replace("24", "6").replace("64", "16") + "\n";
-
-        int y = 1;
-        while(!sourceLines[x + y].contains("}")) {
-          sourceLines[x + y] = sourceLines[x + y].replace("  ", "  (uint4)(").replaceAll(",$", "),");
-          y++;
-        }
-
-        sourceLines[x + y - 1] += ")";
       } else {
         source += sourceLine + "\n";
       }
@@ -1418,9 +1440,9 @@ class DiabloMiner {
 
       info("Added " + deviceName + " (" + deviceCU + " CU, local work size of " + localWorkSize.get(0) + ")");
 
-      workSizeBase = localWorkSize.get(0) * localWorkSize.get(0);
+      workSizeBase = 64 * 512;
 
-      workSize = workSizeBase * 4;
+      workSize = workSizeBase * 16;
 
       for(int i = 0; i < EXECUTION_TOTAL; i++) {
         executions[i] = this.new ExecutionState();
