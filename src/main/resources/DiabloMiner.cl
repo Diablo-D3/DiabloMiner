@@ -334,7 +334,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZC[2] = 0x6a09e667U + ZB[2];
     ZD[2] = ZB[2] + ZR30(ZG[1]) + ZMa(ZD[1], ZH[0], ZG[1]);
     ZE[2] = ZR15(ZH[1]) + ZR25(ZE[3]) + ZD[3];
-    ZF[2] = ZD[0] + 0x3956c25bU + ZE[3] + ZCh(ZC[2], ZF[1], ZC[1]) + ZR26(ZC[2]);
+    ZF[2] = ZA[3] + 0xd21ea4fdU + ZE[3] + ZCh(ZC[2], ZF[1], ZC[1]) + ZR26(ZC[2]);
     ZG[2] = ZH[0] + ZF[2];
     ZH[2] = ZF[2] + ZR30(ZD[2]) + ZMa(ZG[1], ZD[1], ZD[2]);
     ZA[3] = ZR15(ZA[2]) + ZR25(ZF[3]) + ZE[3];
