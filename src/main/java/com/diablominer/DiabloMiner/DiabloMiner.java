@@ -26,6 +26,7 @@ import java.io.Writer;
 import java.net.Authenticator;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
 import java.net.PasswordAuthentication;
 import java.net.Proxy;
 import java.net.Proxy.Type;
@@ -424,7 +425,11 @@ class DiabloMiner {
       if(splitPort != null && splitPort.length > i)
         port = Integer.parseInt(splitPort[i]);
 
-      networkStates[j] = new NetworkState(new URL(protocol, host, port, path), user, pass, j);
+      try {
+        networkStates[j] = new NetworkState(new URL(protocol, host, port, path), user, pass, j);
+      } catch(MalformedURLException e) {
+        throw new DiabloMinerFatalException("Malformed connection paramaters");
+      }
     }
 
     InputStream stream = DiabloMiner.class.getResourceAsStream("/DiabloMiner.cl");
@@ -1300,8 +1305,9 @@ class DiabloMiner {
            deviceName.contains("Barts")      ||
            deviceName.contains("Cayman")     ||
            deviceName.contains("Antilles")   ||
+           deviceName.contains("Palm")       ||
+           deviceName.contains("Sumo")       ||
            deviceName.contains("Wrestler")   ||
-           deviceName.contains("Zacate")     ||
            deviceName.contains("WinterPark") ||
            deviceName.contains("BeaverCreek"))
           hasBFI_INT = true;
