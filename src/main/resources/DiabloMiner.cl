@@ -60,7 +60,11 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
   z ZG[4];
   z ZH[4];
 
+  #ifdef USEBASE
   uint noncebase = base + get_global_id(0);
+  #else
+  uint noncebase = get_global_id(0);
+  #endif
 
   #ifdef DOLOOPS
   noncebase *= LOOPS;

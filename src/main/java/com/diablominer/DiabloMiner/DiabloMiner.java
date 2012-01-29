@@ -63,7 +63,6 @@ import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.node.ArrayNode;
-import org.codehaus.jackson.node.IntNode;
 import org.codehaus.jackson.node.NullNode;
 import org.codehaus.jackson.node.ObjectNode;
 import org.lwjgl.BufferUtils;
@@ -1253,6 +1252,7 @@ class DiabloMiner {
 
     final CLDevice device;
     final CLContext context;
+    final boolean useBase;
 
     final CLKernel kernel;
 
@@ -1286,6 +1286,11 @@ class DiabloMiner {
       deviceName = device.getInfoString(CL10.CL_DEVICE_NAME).trim() + " (#" + count + ")";
       int deviceCU = device.getInfoInt(CL10.CL_DEVICE_MAX_COMPUTE_UNITS);
       long deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
+
+      if(platform.getInfoString(CL10.CL_PLATFORM_VERSION).contains("OpenCL 1.0"))
+        useBase = true;
+      else
+        useBase = false;
 
       context = CL10.clCreateContext(properties, device, new CLContextCallback() {
         protected void handleMessage(String errinfo, ByteBuffer private_info) {
@@ -1333,6 +1338,9 @@ class DiabloMiner {
         compileOptions = " -D WORKSIZE=" + forceWorkSize;
       else
         compileOptions = " -D WORKSIZE=" + deviceWorkSize;
+
+      if(useBase)
+        compileOptions += " -D USEBASE";
 
       if(hasBitAlign)
         compileOptions += " -D BITALIGN";
@@ -1549,6 +1557,11 @@ class DiabloMiner {
         boolean resetBuffer;
         boolean skip = false;
 
+        PointerBuffer workBase = new PointerBuffer(1);
+
+        if(!useBase)
+          kernel.setArg(0, 0);
+
         currentWork = this.new GetWorkParser();
 
         while(running.get()) {
@@ -1649,8 +1662,12 @@ class DiabloMiner {
           int B1_plus_K6 = midstate2[1] + 0x923f82a4;
           int C1_plus_K5 = midstate2[2] + 0x59f111f1;
 
-          kernel.setArg(0, (int)(currentWork.base / loops / totalVectors))
-                .setArg(1, PreVal4_plus_state0)
+          if(useBase)
+            kernel.setArg(0, (int)(currentWork.base / loops / totalVectors));
+          else
+            workBase.put(0, (int)(currentWork.base / loops / totalVectors));
+
+          kernel.setArg(1, PreVal4_plus_state0)
                 .setArg(2, PreVal4_plus_T1)
                 .setArg(3, W18)
                 .setArg(4, W19)
@@ -1658,7 +1675,7 @@ class DiabloMiner {
                 .setArg(6, W17)
                 .setArg(7, W31)
                 .setArg(8, W32)
-                .setArg(9, midstate2[3] + 0xB956c25b)
+                .setArg(9, (int)(midstate2[3] + 0xB956c25bL))
                 .setArg(10, midstate2[1])
                 .setArg(11, midstate2[2])
                 .setArg(12, midstate2[7])
@@ -1676,7 +1693,10 @@ class DiabloMiner {
                 .setArg(24, currentWork.midstate[7])
                 .setArg(25, output[bufferIndex]);
 
-          err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
+          if(useBase)
+            err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
+          else
+            err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBase, workSizeTemp, localWorkSize, null, null);
 
           if(err !=  CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
             try {
