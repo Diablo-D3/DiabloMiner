@@ -39,16 +39,16 @@ typedef uint z;
 #define ZR30(n) ((Zrotr((n), 30) ^ Zrotr((n), 19) ^ Zrotr((n), 10)))
 
 __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
+    const uint base,
+    const uint PreVal4_plus_state0, const uint PreVal4_plus_T1,
+    const uint W18, const uint W19,
+    const uint W16, const uint W17,
+    const uint W31, const uint W32,
+    const uint d1, const uint b1, const uint c1,
+    const uint h1, const uint f1, const uint g1,
+    const uint c1_plus_k5, const uint b1_plus_k6,
     const uint state0, const uint state1, const uint state2, const uint state3,
     const uint state4, const uint state5, const uint state6, const uint state7,
-    const uint b1, const uint c1, const uint d1,
-    const uint f1, const uint g1, const uint h1,
-    const uint base,
-    const uint W16, const uint W17,
-    const uint W18, const uint W19,
-    const uint W31, const uint W32,
-    const uint PreVal4_plus_state0, const uint PreVal4_plus_T1,
-    const uint b1_plus_k6, const uint c1_plus_k5,
     __global uint * output)
 {
   z ZA[4];
