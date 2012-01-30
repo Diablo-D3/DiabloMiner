@@ -38,9 +38,11 @@ typedef uint z;
 #define ZR26(n) ((Zrotr((n), 26) ^ Zrotr((n), 21) ^ Zrotr((n), 7)))
 #define ZR30(n) ((Zrotr((n), 30) ^ Zrotr((n), 19) ^ Zrotr((n), 10)))
 
-__kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
+__kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) 
+         __attribute__((vec_type_hint(uintzz))) void search(
     const uint base,
-    const uint PreVal4_plus_state0, const uint PreVal4_plus_T1,
+    const uint PreVal4_state0, const uint PreVal4_state0_k7,
+    const uint PreVal4_T1,
     const uint W18, const uint W19,
     const uint W16, const uint W17,
     const uint W31, const uint W32,
@@ -78,8 +80,8 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
 
   for(int i = 0; i < LOOPS; i++) {
   #endif
-    ZA[0] = PreVal4_plus_state0 + Znonce;
-    ZB[0] = PreVal4_plus_T1 + Znonce;
+    ZA[0] = PreVal4_state0 + Znonce;
+    ZB[0] = PreVal4_T1 + Znonce;
 
     ZC[0] = W18 + ZR25(Znonce);
     ZD[0] = W19 + Znonce;
@@ -98,15 +100,18 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     ZA[2] = W32 + ZR15(ZG[1]) + ZB[1];
 
     ZB[2] = d1 + ZCh(ZA[0], b1, c1) + ZR26(ZA[0]);
+
     ZC[2] = h1 + ZB[2];
+
     ZD[2] = ZB[2] + ZR30(ZB[0]) + ZMa(f1, g1, ZB[0]);
+
     ZE[2] = c1_plus_k5 + ZCh(ZC[2], ZA[0], b1) + ZR26(ZC[2]);
     ZF[2] = g1 + ZE[2];
     ZG[2] = ZE[2] + ZR30(ZD[2]) + ZMa(ZB[0], f1, ZD[2]);
     ZH[2] = b1_plus_k6 + ZCh(ZF[2], ZC[2], ZA[0]) + ZR26(ZF[2]);
     ZA[3] = f1 + ZH[2];
     ZB[3] = ZH[2] + ZR30(ZG[2]) + ZMa(ZD[2], ZB[0], ZG[2]);
-    ZC[3] = ZA[0] + 0xab1c5ed5U + ZCh(ZA[3], ZF[2], ZC[2]) + ZR26(ZA[3]);
+    ZC[3] = Znonce + PreVal4_state0_k7 + ZCh(ZA[3], ZF[2], ZC[2]) + ZR26(ZA[3]);
     ZD[3] = ZB[0] + ZC[3];
     ZE[3] = ZC[3] + ZR30(ZB[3]) + ZMa(ZG[2], ZD[2], ZB[3]);
     ZF[3] = ZC[2] + 0xd807aa98U + ZCh(ZD[3], ZA[3], ZF[2]) + ZR26(ZD[3]);

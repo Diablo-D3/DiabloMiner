@@ -1657,41 +1657,43 @@ class DiabloMiner {
           int T1 = (rot(midstate2[5], 2) ^ rot(midstate2[5], 13) ^ rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) |
                 (midstate2[7] & (midstate2[5] | midstate2[6])));
 
-          int PreVal4_plus_state0 = PreVal4 + currentWork.midstate[0];
-          int PreVal4_plus_T1 = PreVal4 + T1;
-          int B1_plus_K6 = midstate2[1] + 0x923f82a4;
-          int C1_plus_K5 = midstate2[2] + 0x59f111f1;
+          int PreVal4_state0 = PreVal4 + currentWork.midstate[0];
+          int PreVal4_state0_k7 = (int)(PreVal4_state0 + 0xAB1C5ED5L);
+          int PreVal4_T1 = PreVal4 + T1;
+          int B1_plus_K6 = (int)(midstate2[1] + 0x923f82a4L);
+          int C1_plus_K5 = (int)(midstate2[2] + 0x59f111f1L);
 
           if(useBase)
             kernel.setArg(0, (int)(currentWork.base / loops / totalVectors));
           else
             workBase.put(0, (int)(currentWork.base / loops / totalVectors));
 
-          kernel.setArg(1, PreVal4_plus_state0)
-                .setArg(2, PreVal4_plus_T1)
-                .setArg(3, W18)
-                .setArg(4, W19)
-                .setArg(5, W16)
-                .setArg(6, W17)
-                .setArg(7, W31)
-                .setArg(8, W32)
-                .setArg(9, (int)(midstate2[3] + 0xB956c25bL))
-                .setArg(10, midstate2[1])
-                .setArg(11, midstate2[2])
-                .setArg(12, midstate2[7])
-                .setArg(13, midstate2[5])
-                .setArg(14, midstate2[6])
-                .setArg(15, C1_plus_K5)
-                .setArg(16, B1_plus_K6)
-                .setArg(17, currentWork.midstate[0])
-                .setArg(18, currentWork.midstate[1])
-                .setArg(19, currentWork.midstate[2])
-                .setArg(20, currentWork.midstate[3])
-                .setArg(21, currentWork.midstate[4])
-                .setArg(22, currentWork.midstate[5])
-                .setArg(23, currentWork.midstate[6])
-                .setArg(24, currentWork.midstate[7])
-                .setArg(25, output[bufferIndex]);
+          kernel.setArg(1, PreVal4_state0)
+                .setArg(2, PreVal4_state0_k7)
+                .setArg(3, PreVal4_T1)
+                .setArg(4, W18)
+                .setArg(5, W19)
+                .setArg(6, W16)
+                .setArg(7, W17)
+                .setArg(8, W31)
+                .setArg(9, W32)
+                .setArg(10, (int)(midstate2[3] + 0xB956c25bL))
+                .setArg(11, midstate2[1])
+                .setArg(12, midstate2[2])
+                .setArg(13, midstate2[7])
+                .setArg(14, midstate2[5])
+                .setArg(15, midstate2[6])
+                .setArg(16, C1_plus_K5)
+                .setArg(17, B1_plus_K6)
+                .setArg(18, currentWork.midstate[0])
+                .setArg(19, currentWork.midstate[1])
+                .setArg(20, currentWork.midstate[2])
+                .setArg(21, currentWork.midstate[3])
+                .setArg(22, currentWork.midstate[4])
+                .setArg(23, currentWork.midstate[5])
+                .setArg(24, currentWork.midstate[6])
+                .setArg(25, currentWork.midstate[7])
+                .setArg(26, output[bufferIndex]);
 
           if(useBase)
             err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
