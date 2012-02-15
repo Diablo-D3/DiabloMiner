@@ -100,8 +100,6 @@ class DiabloMiner {
   boolean debug = false;
   boolean edebug = false;
   boolean debugtimer = false;
-  boolean array = false;
-  boolean altArray = false;
   boolean donate = false;
 
   double targetFPS = 30.0;
@@ -111,6 +109,7 @@ class DiabloMiner {
   int zloops = 1;
   Integer vectors[];
   int totalVectors = 0;
+  int totalVectorsPOT = 0;
   boolean vstore = false;
 
   String source;
@@ -153,8 +152,6 @@ class DiabloMiner {
     getWorkMessage.put("id", 1);
 
     Options options = new Options();
-    options.addOption("a", "array", false, "use arrays to force register layout");
-    options.addOption("aa", "altarray", false, "use alternate array layout");
     options.addOption("u", "user", true, "bitcoin host username");
     options.addOption("p", "pass", true, "bitcoin host password");
     options.addOption("f", "fps", true, "target execution timing");
@@ -224,17 +221,6 @@ class DiabloMiner {
     if(line.hasOption("loops"))
       zloops = (int) Math.pow(2, Integer.parseInt(line.getOptionValue("loops")));
 
-    if(line.hasOption("array"))
-      array = true;
-
-    if(line.hasOption("altarray"))
-      altArray = true;
-
-    if(array && altArray) {
-      error("Cannot use array and altarray at the same time");
-      System.exit(-1);
-    }
-
     if(line.hasOption("donate"))
       donate = true;
 
@@ -270,7 +256,9 @@ class DiabloMiner {
         int powtwo = 1 << (32 - Integer.numberOfLeadingZeros(totalVectors) - 1);
 
         if(totalVectors != powtwo)
-          totalVectors = 1 << (32 - Integer.numberOfLeadingZeros(totalVectors));
+          totalVectorsPOT = 1 << (32 - Integer.numberOfLeadingZeros(totalVectors));
+        else
+          totalVectorsPOT = totalVectors;
 
         Arrays.sort(vectors, Collections.reverseOrder());
       } catch(NumberFormatException e) {
@@ -461,7 +449,7 @@ class DiabloMiner {
 
       if(sourceLine.contains("zz")) {
         if(totalVectors > 1)
-          sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectors));
+          sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectorsPOT));
         else
           sourceLine = sourceLine.replaceAll("zz", "");
       }
@@ -478,13 +466,13 @@ class DiabloMiner {
             sourceLine += ", ";
         }
 
-        for(int z = 0; z < totalVectors - count; z++)
+        for(int z = count; z < totalVectorsPOT; z++)
           sourceLine += ", 0";
 
         sourceLine += ");";
 
         if(totalVectors > 1)
-          sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectors));
+          sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectorsPOT));
         else
           sourceLine = sourceLine.replaceAll("zz", "");
 
@@ -515,55 +503,7 @@ class DiabloMiner {
             replace = replace.replace(";", vectorGlobal);
 
             vectorBase += vectorOffset * vectors[y];
-          } else if(altArray && y % 2 == 1 && replace.contains("+")) {
-            replace = replace.replace(";", "");
-
-            String[] split = replace.split("[^+]=");
-
-            if(split.length > 1) {
-              replace = "    " + split[0].trim() + " = ";
-
-              split = split[1].split("\\+");
-
-              for(int z = split.length - 1; z > -1; z--) {
-                replace += split[z].trim();
-
-                if(z != 0)
-                  replace += " + ";
-              }
-
-              replace += ";";
-            } else {
-              replace = replace + ";";
-            }
-          }
-
-          if(altArray && vectors[y] < 3) {
-            if(vectors[y] == 1) {
-              replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "uint4 Z$1");
-              replace = replace.replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1.s$2");
-            } else {
-              replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "uint4 Z$10; uint4 Z$11");
-
-              StringBuffer sb = new StringBuffer();
-              Pattern p = Pattern.compile("Z([A-Z])\\[([0-9])\\]");
-              Matcher m = p.matcher(replace);
-              while(m.find()) {
-                int index = Integer.parseInt(m.group(2));
-
-                if(index % 2 == 0)
-                  m.appendReplacement(sb, "Z$1" + (index / 2) + ".hi");
-                else
-                  m.appendReplacement(sb, "Z$1" + (index / 2) + ".lo");
-              }
-
-              m.appendTail(sb);
-              replace = sb.toString();
-            }
-          } else if(!array) {
-            replace = replace.replaceAll("z Z([A-Z])\\[[0-9]\\]", "z Z$10; z Z$11; z Z$12; z Z$13")
-                             .replaceAll("Z([A-Z])\\[([0-9])\\]", "Z$1$2");
-          }
+          } 
 
           if(vectors[y] == 1 && replace.contains("bool Zio")) {
             replace = replace.replace("any(", "(");
@@ -575,7 +515,7 @@ class DiabloMiner {
         source += sourceLine.replace("any", "") + "\n";
       } else if(sourceLine.contains("__global")) {
         if(totalVectors > 1)
-          source += sourceLine.replaceAll("uint", "uint" + totalVectors) + "\n";
+          source += sourceLine.replaceAll("uint", "uint" + totalVectorsPOT) + "\n";
         else
           source += sourceLine + "\n";
       } else {
@@ -1662,6 +1602,8 @@ class DiabloMiner {
           int PreVal4_T1 = PreVal4 + T1;
           int B1_plus_K6 = (int)(midstate2[1] + 0x923f82a4L);
           int C1_plus_K5 = (int)(midstate2[2] + 0x59f111f1L);
+          int W16_plus_K16 = (int)(W16 + 0xe49b69c1L);
+          int W17_plus_K17 = (int)(W17 + 0xefbe4786L);
 
           if(useBase)
             kernel.setArg(0, (int)(currentWork.base / loops / totalVectors));
@@ -1675,25 +1617,27 @@ class DiabloMiner {
                 .setArg(5, W19)
                 .setArg(6, W16)
                 .setArg(7, W17)
-                .setArg(8, W31)
-                .setArg(9, W32)
-                .setArg(10, (int)(midstate2[3] + 0xB956c25bL))
-                .setArg(11, midstate2[1])
-                .setArg(12, midstate2[2])
-                .setArg(13, midstate2[7])
-                .setArg(14, midstate2[5])
-                .setArg(15, midstate2[6])
-                .setArg(16, C1_plus_K5)
-                .setArg(17, B1_plus_K6)
-                .setArg(18, currentWork.midstate[0])
-                .setArg(19, currentWork.midstate[1])
-                .setArg(20, currentWork.midstate[2])
-                .setArg(21, currentWork.midstate[3])
-                .setArg(22, currentWork.midstate[4])
-                .setArg(23, currentWork.midstate[5])
-                .setArg(24, currentWork.midstate[6])
-                .setArg(25, currentWork.midstate[7])
-                .setArg(26, output[bufferIndex]);
+                .setArg(8, W16_plus_K16)
+                .setArg(9, W17_plus_K17)
+                .setArg(10, W31)
+                .setArg(11, W32)
+                .setArg(12, (int)(midstate2[3] + 0xB956c25bL))
+                .setArg(13, midstate2[1])
+                .setArg(14, midstate2[2])
+                .setArg(15, midstate2[7])
+                .setArg(16, midstate2[5])
+                .setArg(17, midstate2[6])
+                .setArg(18, C1_plus_K5)
+                .setArg(19, B1_plus_K6)
+                .setArg(20, currentWork.midstate[0])
+                .setArg(21, currentWork.midstate[1])
+                .setArg(22, currentWork.midstate[2])
+                .setArg(23, currentWork.midstate[3])
+                .setArg(24, currentWork.midstate[4])
+                .setArg(25, currentWork.midstate[5])
+                .setArg(26, currentWork.midstate[6])
+                .setArg(27, currentWork.midstate[7])
+                .setArg(28, output[bufferIndex]);
 
           if(useBase)
             err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, null, workSizeTemp, localWorkSize, null, null);
