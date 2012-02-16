@@ -70,9 +70,12 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
   uintzz nonce = (uintzz)0;
 
   #ifdef DOLOOPS
-  uintzz loopout = 0;
+  uintzz loopout = (uintzz)0;
+  z Zbasenonce = Znonce;
 
+  #pragma unroll LOOPS
   for(int i = 0; i < LOOPS; i++) {
+    Znonce = Zbasenonce + i;
   #endif
     ZA[15] = Znonce + PreVal4_state0;
     
@@ -1248,12 +1251,10 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
     bool io = false;
     io = (Zio) ? Zio : io;
 
-    nonce = Znonce;
-
-  #ifdef DOLOOPS
-    loopout = (io) ? nonce : loopout;
-
-    Znonce += (z)1;
+  #ifndef DOLOOPS
+    nonce = (io) ? Znonce : nonce;
+  #else
+    loopout = (io) ? Znonce : loopout;
   }
 
   nonce = loopout;

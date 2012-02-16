@@ -100,7 +100,6 @@ class DiabloMiner {
   boolean debug = false;
   boolean edebug = false;
   boolean debugtimer = false;
-  boolean donate = false;
 
   double targetFPS = 30.0;
   double targetFPSBasis;
@@ -167,7 +166,6 @@ class DiabloMiner {
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("ds", "ksource", false, "output kernel source and quit");
     options.addOption("dt", "debugtimer", false, "run for 1 minute and quit");
-    options.addOption("b", "donate", false, "donate BTC to DiabloMiner development");
     options.addOption("h", "help", false, "this help");
 
     PosixParser parser = new PosixParser();
@@ -192,9 +190,9 @@ class DiabloMiner {
     if(line.hasOption("fps")) {
       targetFPS = Float.parseFloat(line.getOptionValue("fps"));
 
-      if(targetFPS < 0.01) {
-        error("--fps argument is too low, adjusting to 0.01");
-        targetFPS = 0.01;
+      if(targetFPS < 0.1) {
+        error("--fps argument is too low, adjusting to 0.1");
+        targetFPS = 0.1;
       }
     }
 
@@ -218,9 +216,6 @@ class DiabloMiner {
 
     if(line.hasOption("loops"))
       zloops = (int) Math.pow(2, Integer.parseInt(line.getOptionValue("loops")));
-
-    if(line.hasOption("donate"))
-      donate = true;
 
     if(line.hasOption("vectors")) {
       String tempVectors[] = line.getOptionValue("vectors").split(",");
@@ -344,19 +339,7 @@ class DiabloMiner {
 
     int j = 0;
 
-    if(donate) {
-      j++;
-      networkStatesCount++;
-
-      networkStates = new NetworkState[networkStatesCount];
-
-      networkStates[0] = new NetworkState(new URL("http", "mining.eligius.st", 8337, "/"),
-            "1L12ACGxLH8kL2Zp7Sy6P8wgfQopDVyaoe", "", 0);
-
-      info("You are donating to DiabloMiner, thank you!");
-    } else {
-      networkStates = new NetworkState[networkStatesCount];
-    }
+    networkStates = new NetworkState[networkStatesCount];
 
     for(int i = 0; j < networkStatesCount; i++, j++) {
       String protocol = "http";
@@ -448,22 +431,24 @@ class DiabloMiner {
           sourceLine = sourceLine.replaceAll("zz", "");
       }
 
-      if(sourceLine.contains("nonce = Znonce")) {
+      if(sourceLine.contains("= (io) ? Znonce")) {
         int count = 0;
-        sourceLine = "    nonce = (uintzz)(";
+        String change = "(uintzz)(";
 
         for(int z = 0; z < vectors.length; z++) {
-          sourceLine += UPPER[z] + "nonce";
+          change += UPPER[z] + "nonce";
           count += vectors[z];
 
           if(z != vectors.length - 1)
-            sourceLine += ", ";
+            change += ", ";
         }
 
         for(int z = count; z < totalVectorsPOT; z++)
-          sourceLine += ", 0";
+          change += ", 0";
 
-        sourceLine += ");";
+        change += ")";
+
+        sourceLine = sourceLine.replace("Znonce", change);
 
         if(totalVectors > 1)
           sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectorsPOT));
@@ -528,13 +513,9 @@ class DiabloMiner {
 
     StringBuilder list = new StringBuilder(networkStates[0].queryUrl.toString());
 
-    if(!donate) {
-      for(int i = 1; i < networkStatesCount; i++)
-        list.append(", " + networkStates[i].queryUrl);
-    } else {
-      for(int i = 1; i < networkStatesCount - 1; i++)
-        list.append(", " + networkStates[i].queryUrl);
-    }
+ 
+    for(int i = 1; i < networkStatesCount - 1; i++)
+     list.append(", " + networkStates[i].queryUrl);
 
     info("Connecting to: " + list);
 
@@ -1067,11 +1048,6 @@ class DiabloMiner {
               getWorkParser.networkState = networkStates[0];
               getWorkParser.networkState.getWorkAsync.add(getWorkParser);
               getWorkParser.resetTime = getNow();
-            } else if(donate && getWorkParser.networkState.index == 0 &&
-                  getWorkParser.resetTime < getNow() - 60 * 1000){
-                getWorkParser.networkState = networkStates[1];
-                getWorkParser.networkState.getWorkAsync.add(getWorkParser);
-                getWorkParser.resetTime = getNow();
             }
 
             if(queueIncoming.get() != null) {
