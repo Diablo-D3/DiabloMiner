@@ -109,6 +109,7 @@ class DiabloMiner {
   Integer vectors[];
   int totalVectors = 0;
   int totalVectorsPOT = 0;
+  boolean noArray = false;
 
   String source;
 
@@ -162,6 +163,7 @@ class DiabloMiner {
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("z", "loops", true, "kernel loops (PoT exp, 0 is off)");
     options.addOption("v", "vectors", true, "vector size in kernel");
+    options.addOption("na", "noarray", false, "turn kernel array off");
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("ds", "ksource", false, "output kernel source and quit");
@@ -262,6 +264,10 @@ class DiabloMiner {
       vectors = new Integer[1];
       vectors[0] = 1;
       totalVectors = 1;
+    }
+
+    if(line.hasOption("noarray")) {
+      noArray = true;
     }
 
     if(line.hasOption("devices")) {
@@ -424,6 +430,10 @@ class DiabloMiner {
     for(int x = 0; x < sourceLines.length; x++) {
       String sourceLine = sourceLines[x];
 
+      if(noArray && !sourceLine.contains("z ZA")) {
+        sourceLine = sourceLine.replaceAll("ZA\\[([0-9]+)\\]", "ZA$1");
+      }
+
       if(sourceLine.contains("zz")) {
         if(totalVectors > 1)
           sourceLine = sourceLine.replaceAll("zz", String.valueOf(totalVectorsPOT));
@@ -459,6 +469,19 @@ class DiabloMiner {
       } else if((sourceLine.contains("Z") || sourceLine.contains("z")) && !sourceLine.contains("__")) {
         for(int y = 0; y < vectors.length; y++) {
           String replace = sourceLine;
+
+          if(noArray && replace.contains("z ZA")) {
+            replace = "";
+
+            for(int z = 0; z < 930; z += 5) {
+              replace += "     ";
+
+              for(int w = 0; w < 5; w++)
+                replace += "z ZA" + (z + w) + "; ";
+
+              replace += "\n";
+            }
+          }
 
           if(vectors[y] > 1 && replace.contains("typedef")) {
             replace = replace.replace("uint", "uint" + vectors[y]);
@@ -513,7 +536,6 @@ class DiabloMiner {
 
     StringBuilder list = new StringBuilder(networkStates[0].queryUrl.toString());
 
- 
     for(int i = 1; i < networkStatesCount - 1; i++)
      list.append(", " + networkStates[i].queryUrl);
 
