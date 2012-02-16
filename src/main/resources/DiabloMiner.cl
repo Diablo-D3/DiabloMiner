@@ -1261,11 +1261,7 @@ __kernel __attribute__((reqd_work_group_size(WORKSIZE, 1, 1))) void search(
   bool io = any(nonce > (uintzz)0);
   #endif
 
-  #ifdef VSTORE
-  if(io) { vstorezz(nonce, 0, output); }
-  #else
   if(io) { output[0] = (uintzz)nonce; }
-  #endif
 }
 
 // vim: set ft=c

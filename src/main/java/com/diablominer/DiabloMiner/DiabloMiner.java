@@ -110,7 +110,6 @@ class DiabloMiner {
   Integer vectors[];
   int totalVectors = 0;
   int totalVectorsPOT = 0;
-  boolean vstore = false;
 
   String source;
 
@@ -164,7 +163,6 @@ class DiabloMiner {
     options.addOption("l", "url", true, "bitcoin host url");
     options.addOption("z", "loops", true, "kernel loops (PoT exp, 0 is off)");
     options.addOption("v", "vectors", true, "vector size in kernel");
-    options.addOption("vs", "vstore", false, "use vstore instead of array set");
     options.addOption("d", "debug", false, "enable debug output");
     options.addOption("dd", "edebug", false, "enable extra debug output");
     options.addOption("ds", "ksource", false, "output kernel source and quit");
@@ -269,10 +267,6 @@ class DiabloMiner {
       vectors = new Integer[1];
       vectors[0] = 1;
       totalVectors = 1;
-    }
-
-    if(line.hasOption("vstore")) {
-      vstore = true;
     }
 
     if(line.hasOption("devices")) {
@@ -1291,10 +1285,6 @@ class DiabloMiner {
       if(loops > 1) {
         compileOptions += " -D DOLOOPS";
         compileOptions += " -D LOOPS=" + loops;
-      }
-
-      if(vstore) {
-        compileOptions += " -D VSTORE";
       }
 
       program = CL10.clCreateProgramWithSource(context, source, null);
