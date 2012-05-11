@@ -48,8 +48,6 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -73,6 +71,7 @@ import org.lwjgl.opencl.CLCommandQueue;
 import org.lwjgl.opencl.CLContext;
 import org.lwjgl.opencl.CLContextCallback;
 import org.lwjgl.opencl.CLDevice;
+import org.lwjgl.opencl.CLEvent;
 import org.lwjgl.opencl.CLKernel;
 import org.lwjgl.opencl.CLMem;
 import org.lwjgl.opencl.CLPlatform;
@@ -500,7 +499,7 @@ class DiabloMiner {
 						replace = replace.replace(";", vectorGlobal);
 
 						vectorBase += vectors[y];
-					} 
+					}
 
 					if(vectors[y] == 1 && replace.contains("bool Zio")) {
 						replace = replace.replace("any(", "(");
@@ -1564,7 +1563,7 @@ class DiabloMiner {
 					int W17_plus_K17 = (int)(W17 + 0xefbe4786L);
 
 					workBase.put(0, (int)(currentWork.base));
-	
+
 					kernel.setArg(0, PreVal4_state0)
 								.setArg(1, PreVal4_state0_k7)
 								.setArg(2, PreVal4_T1)
@@ -1612,6 +1611,11 @@ class DiabloMiner {
 						runs.incrementAndGet();
 
 						CL10.clWaitForEvents(event);
+
+						CLEvent e = queue.getCLEvent(event.get(0));
+
+						if(e != null)
+							CL10.clReleaseEvent(e);
 					}
 				}
 			}
