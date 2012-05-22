@@ -71,7 +71,6 @@ import org.lwjgl.opencl.CLCommandQueue;
 import org.lwjgl.opencl.CLContext;
 import org.lwjgl.opencl.CLContextCallback;
 import org.lwjgl.opencl.CLDevice;
-import org.lwjgl.opencl.CLEvent;
 import org.lwjgl.opencl.CLKernel;
 import org.lwjgl.opencl.CLMem;
 import org.lwjgl.opencl.CLPlatform;
@@ -86,7 +85,7 @@ class DiabloMiner {
 	final static long TIME_OFFSET = 7500;
 	final static int OUTPUTS = 16;
 	final static long TWO32 = 4294967295L;
-	final static byte[] EMPTY_BUFFER = new byte[4 * OUTPUTS];
+	final static ByteBuffer EMPTY_BUFFER = BufferUtils.createByteBuffer(4 * OUTPUTS);
 
 	NetworkState[] networkStates;
 	int networkStatesCount;
@@ -1252,12 +1251,13 @@ class DiabloMiner {
 					hasBFI_INT = true;
 			}
 
+			//String compileOptions = "-save-temps="+(device.getInfoString(CL10.CL_DEVICE_NAME).trim());
 			String compileOptions = "";
 
 			if(forceWorkSize > 0)
-				compileOptions = " -D WORKSIZE=" + forceWorkSize;
+				compileOptions += " -D WORKSIZE=" + forceWorkSize;
 			else
-				compileOptions = " -D WORKSIZE=" + deviceWorkSize;
+				compileOptions += " -D WORKSIZE=" + deviceWorkSize;
 
 			if(hasBitAlign)
 				compileOptions += " -D BITALIGN";
@@ -1418,9 +1418,9 @@ class DiabloMiner {
 
 		class ExecutionState implements Runnable {
 			final CLCommandQueue queue;
-			ByteBuffer buffer[] = new ByteBuffer[2];
+			ByteBuffer buffer;
 			final CLMem output[] = new CLMem[2];
-			int bufferIndex = 0;
+			int outputIndex = 0;
 
 			final int[] midstate2 = new int[16];
 
@@ -1444,16 +1444,13 @@ class DiabloMiner {
 				}
 
 				for(int i = 0; i < 2; i++) {
-					buffer[i] = BufferUtils.createByteBuffer(4 * OUTPUTS);
+					output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY | CL10.CL_MEM_ALLOC_HOST_PTR | CL10.CL_MEM_COPY_HOST_PTR, EMPTY_BUFFER, errBuf);
 
-					output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY | CL10.CL_MEM_USE_HOST_PTR, buffer[i], errBuf);
+					EMPTY_BUFFER.position(0);
 
 					if(output == null || errBuf.get(0) != CL10.CL_SUCCESS) {
 						throw new DiabloMinerFatalException("Failed to allocate output buffer");
 					}
-
-					buffer[i].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
-					buffer[i].position(0);
 				}
 			}
 
@@ -1462,9 +1459,11 @@ class DiabloMiner {
 				boolean resetBuffer;
 
 				PointerBuffer workBase = new PointerBuffer(1);
-				PointerBuffer event = new PointerBuffer(1);
 
 				currentWork = this.new GetWorkParser();
+
+				buffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE,
+					0, 4 * OUTPUTS, null, null, null);
 
 				while(running.get()) {
 					submittedBlock = false;
@@ -1473,7 +1472,7 @@ class DiabloMiner {
 					boolean hwError = false;
 
 					for(int z = 0; z < OUTPUTS; z++) {
-						int nonce = buffer[bufferIndex].getInt(z * 4);
+						int nonce = buffer.getInt(z * 4);
 
 						if(nonce != 0) {
 							for(int j = 0; j < 19; j++)
@@ -1518,9 +1517,11 @@ class DiabloMiner {
 						}
 
 					if(resetBuffer) {
-						buffer[bufferIndex].put(EMPTY_BUFFER, 0, 4 * OUTPUTS);
-						buffer[bufferIndex].position(0);
+						buffer.put(EMPTY_BUFFER);
+						EMPTY_BUFFER.position(0);
 					}
+
+					CL10.clEnqueueUnmapMemObject(queue, output[outputIndex], buffer, null, null);
 
 					if(submittedBlock) {
 						if(currentWork.networkState.longPollAsync == null) {
@@ -1529,7 +1530,7 @@ class DiabloMiner {
 						}
 					}
 
-					bufferIndex = (bufferIndex == 0) ? 1 : 0;
+					outputIndex = (outputIndex == 0) ? 1 : 0;
 
 					workSizeTemp.put(0, workSize);
 					currentWork.update(workSizeTemp.get(0) * totalVectors);
@@ -1591,9 +1592,9 @@ class DiabloMiner {
 								.setArg(24, currentWork.midstate[5])
 								.setArg(25, currentWork.midstate[6])
 								.setArg(26, currentWork.midstate[7])
-								.setArg(27, output[bufferIndex]);
+								.setArg(27, output[outputIndex]);
 
-					err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBase, workSizeTemp, localWorkSize, null, event);
+					err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBase, workSizeTemp, localWorkSize, null, null);
 
 					if(err !=	CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
 						try {
@@ -1610,12 +1611,8 @@ class DiabloMiner {
 						currentWork.base += increment;
 						runs.incrementAndGet();
 
-						CL10.clWaitForEvents(event);
-
-						CLEvent e = queue.getCLEvent(event.get(0));
-
-						if(e != null)
-							CL10.clReleaseEvent(e);
+						buffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE,
+							0, 4 * OUTPUTS, null, null, null);
 					}
 				}
 			}
