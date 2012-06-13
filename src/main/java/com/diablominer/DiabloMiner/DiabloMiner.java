@@ -894,16 +894,29 @@ class DiabloMiner {
 
 				Object output = mapper.readTree(responseStream);
 
-				if(NullNode.class.equals(output.getClass()))
+				if(NullNode.class.equals(output.getClass())) {
 					throw new IOException("Bitcoin returned unparsable JSON");
-				else
+				} else {
 					try {
 						responseMessage = (ObjectNode) output;
 					} catch(ClassCastException e) {
 						throw new IOException("Bitcoin returned unparsable JSON");
 					}
+				}
 
 				responseStream.close();
+
+				try {
+					if(sendWork == false) {
+						String datas = responseMessage.get("result").get("data").asText();
+						String midstates = responseMessage.get("result").get("midstate").asText();
+						String targets = responseMessage.get("result").get("target").asText();						
+					} else {
+						boolean accepted = responseMessage.getBooleanValue();	
+					}
+				} catch(Exception e) {
+					throw new IOException("Bitcoin returned unparsable JSON");
+				}
 			} catch (JsonProcessingException e) {
 				throw new IOException("Bitcoin returned unparsable JSON");
 			} catch (IOException e) {
