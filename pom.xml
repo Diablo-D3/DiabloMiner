@@ -38,12 +38,12 @@
     <dependency>
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
-      <version>1.9.2</version>
+      <version>1.9.11</version>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
-      <version>1.6</version>
+      <version>1.7</version>
     </dependency>
     <dependency>
       <groupId>commons-cli</groupId>
@@ -64,9 +64,9 @@
       </plugin>
 
       <plugin>
-        <groupId>org.bluestemsoftware.open.maven.plugin</groupId>
-        <artifactId>launch4j-plugin</artifactId>
-        <version>1.5.0.0</version>
+        <groupId>com.akathist.maven.plugins.launch4j</groupId>
+        <artifactId>launch4j-maven-plugin</artifactId>
+        <version>1.5.1</version>
         <executions>
           <execution>
             <id>windows binary</id>
