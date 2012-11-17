@@ -84,7 +84,7 @@ class DiabloMiner {
 	final static int EXECUTION_TOTAL = 3;
 	final static long TIME_OFFSET = 7500;
 	final static int OUTPUTS = 16;
-	final static long TWO32 = 4294967295L;
+	final static long TWO32 = (int)4294967295L;
 	final static ByteBuffer EMPTY_BUFFER = BufferUtils.createByteBuffer(4 * OUTPUTS);
 
 	NetworkState[] networkStates;
@@ -174,7 +174,7 @@ class DiabloMiner {
 			line = parser.parse(options, args);
 
 			if(line.hasOption("help")) {
-				throw new ParseException("A wise man once said, '↑ ↑ ↓ ↓ ← → ← → B A'");
+				throw new ParseException("");
 			}
 		} catch (ParseException e) {
 			System.out.println(e.getLocalizedMessage() + "\n");
@@ -347,6 +347,7 @@ class DiabloMiner {
 			String path = "/";
 			String user = "diablominer";
 			String pass = "diablominer";
+			byte hostChain = 0;
 
 			if(splitUrl != null && splitUrl.length > i) {
 				String[] usernameFix = splitUrl[i].split("@", 3);
@@ -390,7 +391,7 @@ class DiabloMiner {
 				port = Integer.parseInt(splitPort[i]);
 
 			try {
-				networkStates[j] = new NetworkState(new URL(protocol, host, port, path), user, pass, j);
+				networkStates[j] = new NetworkState(new URL(protocol, host, port, path), user, pass, j, hostChain);
 			} catch(MalformedURLException e) {
 				throw new DiabloMinerFatalException("Malformed connection paramaters");
 			}
@@ -726,6 +727,8 @@ class DiabloMiner {
 		URL longPollUrl;
 		String userPass;
 		int index;
+		int hostChain;
+		int hostProtocol;
 
 		final GetWorkAsync getWorkAsync = this.new GetWorkAsync();
 		final SendWorkAsync sendWorkAsync = this.new SendWorkAsync();
@@ -735,11 +738,18 @@ class DiabloMiner {
 		boolean noDelay = false;
 		String rejectReason = null;
 
-		NetworkState(URL url, String user, String pass, int index) {
+		static final byte PROTOCOL_JSONRPC = 0;
+		static final byte PROTOCOL_STRATUM = 1;
+		static final byte CHAIN_BITCOIN = 0;
+		static final byte CHAIN_LITECOIN = 1;
+
+		NetworkState(URL url, String user, String pass, int index, byte hostChain) {
 			this.queryUrl = url;
 			this.userPass = "Basic " + Base64.encodeBase64String((user + ":" + pass).getBytes()).trim().replace("\r\n", "");
 			this.index = index;
 			this.refresh = getWorkRefresh;
+			this.hostChain = hostChain;
+			this.hostProtocol = hostProtocol;
 
 			Thread thread = new Thread(getWorkAsync, "DiabloMiner GetWorkAsync for " + url.getHost());
 			thread.start();
