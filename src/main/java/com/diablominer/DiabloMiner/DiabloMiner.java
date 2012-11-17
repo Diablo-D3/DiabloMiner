@@ -601,7 +601,7 @@ class DiabloMiner {
 			double hashLongCount = (double)currentHashCount / (double)(now - startTime) / 1000.0;
 
 			if(now - startTime > TIME_OFFSET * 2) {
-				double averageHashCount = (double)(adjustedHashCount + previousAdjustedHashCount) / 2.0 / 1000.0;
+				double averageHashCount = (adjustedHashCount + previousAdjustedHashCount) / 2.0 / 1000.0;
 
 				hashMeter.setLength(0);
 
