@@ -84,7 +84,7 @@ class DiabloMiner {
 	final static int EXECUTION_TOTAL = 3;
 	final static long TIME_OFFSET = 7500;
 	final static int OUTPUTS = 16;
-	final static long TWO32 = (int)4294967295L;
+	final static long TWO32 = 4294967295L;
 	final static ByteBuffer EMPTY_BUFFER = BufferUtils.createByteBuffer(4 * OUTPUTS);
 
 	NetworkState[] networkStates;
