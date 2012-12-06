@@ -417,6 +417,8 @@ public class DiabloMiner {
 			} catch(InterruptedException e) {
 			}
 		}
+
+		hashMeterFormatter.close();
 	}
 
 	public static int rot(int x, int y) {

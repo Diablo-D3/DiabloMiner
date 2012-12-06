@@ -390,6 +390,8 @@ public class JSONRPCNetworkState extends NetworkState {
 
 		boolean accepted;
 
+		dataFormatter.close();
+
 		try {
 			accepted = responseMessage.getBooleanValue();
 		} catch(Exception e) {
