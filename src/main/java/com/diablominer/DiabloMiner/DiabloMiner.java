@@ -261,7 +261,7 @@ public class DiabloMiner {
 		}
 
 		if(line.hasOption("worklifetime"))
-			workLifetime = Integer.parseInt(line.getOptionValue("refreshTimeout")) * 1000;
+			workLifetime = Integer.parseInt(line.getOptionValue("worklifetime")) * 1000;
 
 		if(line.hasOption("debug"))
 			debug = true;

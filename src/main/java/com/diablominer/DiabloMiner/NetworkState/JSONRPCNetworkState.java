@@ -419,6 +419,8 @@ public class JSONRPCNetworkState extends NetworkState {
 						try {
 							workState = doGetWorkMessage(false);
 						} catch (IOException e) {
+							diabloMiner.error("Cannot connect to " + queryUrl.getHost() + ": " + e.getLocalizedMessage());
+
 							networkStateNext.addGetQueue(executionState);
 
 							try {
