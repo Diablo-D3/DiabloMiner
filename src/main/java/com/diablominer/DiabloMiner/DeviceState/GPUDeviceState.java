@@ -404,14 +404,14 @@ public class GPUDeviceState extends DeviceState {
 						else
 							diabloMiner.debug("Invalid solution " + diabloMiner.incrementHWErrors() + " from " + executionName + ", possible driver or hardware issue");
 					}
-				}
 
-				if(!skipUnmap) {
 					if(resetBuffer) {
 						outputBuffer.put(EMPTY_BUFFER);
 						EMPTY_BUFFER.position(0);
 					}
+				}
 
+				if(!skipUnmap) {
 					CL10.clEnqueueUnmapMemObject(queue, output[outputIndex], outputBuffer, null, null);
 
 					outputIndex = (outputIndex == 0) ? 1 : 0;
