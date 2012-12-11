@@ -359,7 +359,7 @@ public class GPUDeviceState extends DeviceState {
 					skipProcessing = true;
 				}
 
-				if(!skipProcessing) {
+				if(!skipProcessing | !skipUnmap) {
 					for(int z = 0; z < OUTPUTS; z++) {
 						int nonce = outputBuffer.getInt(z * 4);
 
@@ -406,15 +406,16 @@ public class GPUDeviceState extends DeviceState {
 					}
 				}
 
-				if(resetBuffer) {
-					outputBuffer.put(EMPTY_BUFFER);
-					EMPTY_BUFFER.position(0);
-				}
+				if(!skipUnmap) {
+					if(resetBuffer) {
+						outputBuffer.put(EMPTY_BUFFER);
+						EMPTY_BUFFER.position(0);
+					}
 
-				if(!skipUnmap)
 					CL10.clEnqueueUnmapMemObject(queue, output[outputIndex], outputBuffer, null, null);
 
-				outputIndex = (outputIndex == 0) ? 1 : 0;
+					outputIndex = (outputIndex == 0) ? 1 : 0;
+				}
 
 				long increment = workSize;
 				requestedNewWork = skipUnmap = workState.update(increment);
@@ -487,14 +488,15 @@ public class GPUDeviceState extends DeviceState {
 					err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBase, workSizeBuffer, localWorkSize, null, null);
 
 					if(err != CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
-						try {
-							throw new DiabloMinerFatalException(diabloMiner, "Failed to queue kernel, error " + err);
-						} catch(DiabloMinerFatalException e) { }
+						diabloMiner.error("Failed to queue kernel, error " + err);
+						skipUnmap = true;
 					} else {
-						if(err != CL10.CL_SUCCESS)
+						if(err != CL10.CL_SUCCESS) {
 							diabloMiner.debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
-
-						outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
+							skipUnmap = true;
+						} else {
+							outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
+						}
 					}
 				}
 			}
