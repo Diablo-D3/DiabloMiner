@@ -487,12 +487,16 @@ public class GPUDeviceState extends DeviceState {
 
 					err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBase, workSizeBuffer, localWorkSize, null, null);
 
-					if(err != CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
-						diabloMiner.error("Failed to queue kernel, error " + err);
-						skipUnmap = true;
+					if(err != CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS && err != CL10.CL_INVALID_GLOBAL_OFFSET) {
+						try {
+							throw new DiabloMinerFatalException(diabloMiner, "Failed to queue kernel, error " + err);
+						} catch(DiabloMinerFatalException e) { }
 					} else {
-						if(err != CL10.CL_SUCCESS) {
+						if(err == CL10.CL_INVALID_KERNEL_ARGS) {
 							diabloMiner.debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
+							skipUnmap = true;
+						} else if(err == CL10.CL_INVALID_GLOBAL_OFFSET) {
+							diabloMiner.debug("Spurious CL_INVALID_GLOBAL_OFFSET error, offset: " + workBase.get(0));
 							skipUnmap = true;
 						} else {
 							outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
