@@ -332,6 +332,7 @@ public class GPUDeviceState extends DeviceState {
 			boolean resetBuffer;
 			boolean hwError;
 			boolean skipProcessing;
+			boolean skipUnmap = false;
 
 			while(diabloMiner.getRunning()) {
 				submittedBlock = false;
@@ -410,89 +411,91 @@ public class GPUDeviceState extends DeviceState {
 					EMPTY_BUFFER.position(0);
 				}
 
-				CL10.clEnqueueUnmapMemObject(queue, output[outputIndex], outputBuffer, null, null);
+				if(!skipUnmap)
+					CL10.clEnqueueUnmapMemObject(queue, output[outputIndex], outputBuffer, null, null);
 
 				outputIndex = (outputIndex == 0) ? 1 : 0;
 
-				workSizeBuffer.put(0, workSize);
+				long increment = workSize;
+				requestedNewWork = skipUnmap = workState.update(increment);
 
-				System.arraycopy(workState.getMidstate(), 0, midstate2, 0, 8);
-
-				DiabloMiner.sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, workState.getData(16), 0x428A2F98);
-				DiabloMiner.sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, workState.getData(17), 0x71374491);
-				DiabloMiner.sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, workState.getData(18), 0xB5C0FBCF);
-
-				int W16 = workState.getData(16) + (DiabloMiner.rot(workState.getData(17), 7) ^ DiabloMiner.rot(workState.getData(17), 18) ^
-					(workState.getData(17) >>> 3));
-				int W17 = workState.getData(17) + (DiabloMiner.rot(workState.getData(18), 7) ^ DiabloMiner.rot(workState.getData(18), 18) ^
-					(workState.getData(18) >>> 3)) + 0x01100000;
-				int W18 = workState.getData(18) + (DiabloMiner.rot(W16, 17) ^ DiabloMiner.rot(W16, 19) ^ (W16 >>> 10));
-				int W19 = 0x11002000 + (DiabloMiner.rot(W17, 17) ^ DiabloMiner.rot(W17, 19) ^ (W17 >>> 10));
-				int W31 = 0x00000280 + (DiabloMiner.rot(W16, 7) ^ DiabloMiner.rot(W16, 18) ^ (W16 >>> 3));
-				int W32 = W16 + (DiabloMiner.rot(W17, 7) ^ DiabloMiner.rot(W17, 18) ^ (W17 >>> 3));
-
-				int PreVal4 = workState.getMidstate(4) + (DiabloMiner.rot(midstate2[1], 6) ^ DiabloMiner.rot(midstate2[1], 11) ^ DiabloMiner.rot(midstate2[1], 25)) + (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
-				int T1 = (DiabloMiner.rot(midstate2[5], 2) ^ DiabloMiner.rot(midstate2[5], 13) ^ DiabloMiner.rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) | (midstate2[7] & (midstate2[5] | midstate2[6])));
-
-				int PreVal4_state0 = PreVal4 + workState.getMidstate(0);
-				int PreVal4_state0_k7 = (int) (PreVal4_state0 + 0xAB1C5ED5L);
-				int PreVal4_T1 = PreVal4 + T1;
-				int B1_plus_K6 = (int) (midstate2[1] + 0x923f82a4L);
-				int C1_plus_K5 = (int) (midstate2[2] + 0x59f111f1L);
-				int W16_plus_K16 = (int) (W16 + 0xe49b69c1L);
-				int W17_plus_K17 = (int) (W17 + 0xefbe4786L);
-
-				workBase.put(0, (int) (workState.getBase()));
-
-				kernel
-					.setArg(0, PreVal4_state0)
-					.setArg(1, PreVal4_state0_k7)
-					.setArg(2, PreVal4_T1)
-					.setArg(3, W18)
-					.setArg(4, W19)
-					.setArg(5, W16)
-					.setArg(6, W17)
-					.setArg(7, W16_plus_K16)
-					.setArg(8, W17_plus_K17)
-					.setArg(9, W31)
-					.setArg(10, W32)
-					.setArg(11, (int) (midstate2[3] + 0xB956c25bL))
-					.setArg(12, midstate2[1])
-					.setArg(13, midstate2[2])
-					.setArg(14, midstate2[7])
-					.setArg(15, midstate2[5])
-					.setArg(16, midstate2[6])
-					.setArg(17, C1_plus_K5)
-					.setArg(18, B1_plus_K6)
-					.setArg(19, workState.getMidstate(0))
-					.setArg(20, workState.getMidstate(1))
-					.setArg(21, workState.getMidstate(2))
-					.setArg(22, workState.getMidstate(3))
-					.setArg(23, workState.getMidstate(4))
-					.setArg(24, workState.getMidstate(5))
-					.setArg(25, workState.getMidstate(6))
-					.setArg(26, workState.getMidstate(7))
-					.setArg(27, output[outputIndex]);
-
-				err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBase, workSizeBuffer, localWorkSize, null, null);
-
-				if(err != CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
-					try {
-						throw new DiabloMinerFatalException(diabloMiner, "Failed to queue kernel, error " + err);
-					} catch(DiabloMinerFatalException e) { }
-				} else {
-					if(err != CL10.CL_SUCCESS)
-						diabloMiner.debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
-
-					long increment = workSizeBuffer.get(0) * hardwareType.totalVectors;
-
+				if(!requestedNewWork) {
 					diabloMiner.addAndGetHashCount(increment);
 					deviceHashCount.addAndGet(increment);
 					runs.incrementAndGet();
 
-					outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
+					workSizeBuffer.put(0, increment);
 
-					requestedNewWork = workState.update(increment);
+					System.arraycopy(workState.getMidstate(), 0, midstate2, 0, 8);
+
+					DiabloMiner.sharound(midstate2, 0, 1, 2, 3, 4, 5, 6, 7, workState.getData(16), 0x428A2F98);
+					DiabloMiner.sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, workState.getData(17), 0x71374491);
+					DiabloMiner.sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, workState.getData(18), 0xB5C0FBCF);
+
+					int W16 = workState.getData(16) + (DiabloMiner.rot(workState.getData(17), 7) ^ DiabloMiner.rot(workState.getData(17), 18) ^
+						(workState.getData(17) >>> 3));
+					int W17 = workState.getData(17) + (DiabloMiner.rot(workState.getData(18), 7) ^ DiabloMiner.rot(workState.getData(18), 18) ^
+						(workState.getData(18) >>> 3)) + 0x01100000;
+					int W18 = workState.getData(18) + (DiabloMiner.rot(W16, 17) ^ DiabloMiner.rot(W16, 19) ^ (W16 >>> 10));
+					int W19 = 0x11002000 + (DiabloMiner.rot(W17, 17) ^ DiabloMiner.rot(W17, 19) ^ (W17 >>> 10));
+					int W31 = 0x00000280 + (DiabloMiner.rot(W16, 7) ^ DiabloMiner.rot(W16, 18) ^ (W16 >>> 3));
+					int W32 = W16 + (DiabloMiner.rot(W17, 7) ^ DiabloMiner.rot(W17, 18) ^ (W17 >>> 3));
+
+					int PreVal4 = workState.getMidstate(4) + (DiabloMiner.rot(midstate2[1], 6) ^ DiabloMiner.rot(midstate2[1], 11) ^ DiabloMiner.rot(midstate2[1], 25)) + (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
+					int T1 = (DiabloMiner.rot(midstate2[5], 2) ^ DiabloMiner.rot(midstate2[5], 13) ^ DiabloMiner.rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) | (midstate2[7] & (midstate2[5] | midstate2[6])));
+
+					int PreVal4_state0 = PreVal4 + workState.getMidstate(0);
+					int PreVal4_state0_k7 = (int) (PreVal4_state0 + 0xAB1C5ED5L);
+					int PreVal4_T1 = PreVal4 + T1;
+					int B1_plus_K6 = (int) (midstate2[1] + 0x923f82a4L);
+					int C1_plus_K5 = (int) (midstate2[2] + 0x59f111f1L);
+					int W16_plus_K16 = (int) (W16 + 0xe49b69c1L);
+					int W17_plus_K17 = (int) (W17 + 0xefbe4786L);
+
+					workBase.put(0, (int) (workState.getBase()));
+
+					kernel
+						.setArg(0, PreVal4_state0)
+						.setArg(1, PreVal4_state0_k7)
+						.setArg(2, PreVal4_T1)
+						.setArg(3, W18)
+						.setArg(4, W19)
+						.setArg(5, W16)
+						.setArg(6, W17)
+						.setArg(7, W16_plus_K16)
+						.setArg(8, W17_plus_K17)
+						.setArg(9, W31)
+						.setArg(10, W32)
+						.setArg(11, (int) (midstate2[3] + 0xB956c25bL))
+						.setArg(12, midstate2[1])
+						.setArg(13, midstate2[2])
+						.setArg(14, midstate2[7])
+						.setArg(15, midstate2[5])
+						.setArg(16, midstate2[6])
+						.setArg(17, C1_plus_K5)
+						.setArg(18, B1_plus_K6)
+						.setArg(19, workState.getMidstate(0))
+						.setArg(20, workState.getMidstate(1))
+						.setArg(21, workState.getMidstate(2))
+						.setArg(22, workState.getMidstate(3))
+						.setArg(23, workState.getMidstate(4))
+						.setArg(24, workState.getMidstate(5))
+						.setArg(25, workState.getMidstate(6))
+						.setArg(26, workState.getMidstate(7))
+						.setArg(27, output[outputIndex]);
+
+					err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBase, workSizeBuffer, localWorkSize, null, null);
+
+					if(err != CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS) {
+						try {
+							throw new DiabloMinerFatalException(diabloMiner, "Failed to queue kernel, error " + err);
+						} catch(DiabloMinerFatalException e) { }
+					} else {
+						if(err != CL10.CL_SUCCESS)
+							diabloMiner.debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
+
+						outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
+					}
 				}
 			}
       }
