@@ -496,7 +496,7 @@ public class GPUDeviceState extends DeviceState {
 							diabloMiner.debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
 							skipUnmap = true;
 						} else if(err == CL10.CL_INVALID_GLOBAL_OFFSET) {
-							diabloMiner.debug("Spurious CL_INVALID_GLOBAL_OFFSET error, offset: " + workBase.get(0));
+							diabloMiner.error("Spurious CL_INVALID_GLOBAL_OFFSET error, offset: " + workBase.get(0));
 							skipUnmap = true;
 						} else {
 							outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
