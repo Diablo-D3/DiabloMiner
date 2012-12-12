@@ -48,7 +48,7 @@ public class GPUDeviceState extends DeviceState {
 	final CLContext context;
 	final CLKernel kernel;
 
-	AtomicLong workSize;
+	AtomicLong workSize = new AtomicLong(0);
 	long workSizeBase;
 	boolean hwcheck;
 
