@@ -48,7 +48,7 @@ public class GPUDeviceState extends DeviceState {
 	final CLContext context;
 	final CLKernel kernel;
 
-	long workSize;
+	AtomicLong workSize;
 	long workSizeBase;
 	boolean hwcheck;
 
@@ -229,7 +229,7 @@ public class GPUDeviceState extends DeviceState {
 
 		workSizeBase = 64 * 512;
 
-		workSize = workSizeBase * 16;
+		workSize.set(workSizeBase * 16);
 
 		for(int i = 0; i < GPUHardwareType.EXECUTION_TOTAL; i++) {
 			String executorName =  deviceName + "/" + i;
@@ -246,30 +246,33 @@ public class GPUDeviceState extends DeviceState {
 		long currentRuns = runs.get();
 		double targetFPSBasis = hardwareType.getTargetFPSBasis();
 		int totalVectors = hardwareType.getTotalVectors();
+		long ws = workSize.get();
 
 		if(now > startTime + DiabloMiner.TIME_OFFSET * 2 && currentRuns > lastRuns + diabloMiner.getGPUTargetFPS()) {
 			basis = (double) elapsed / (double) (currentRuns - lastRuns);
 
 			if(basis < targetFPSBasis / 4)
-				workSize += workSizeBase  * 16;
+				ws += workSizeBase  * 16;
 			else if(basis < targetFPSBasis / 2)
-				workSize += workSizeBase  * 4;
+				ws += workSizeBase  * 4;
 			else if(basis < targetFPSBasis)
-				workSize += workSizeBase;
+				ws += workSizeBase;
 			else if(basis > targetFPSBasis * 4)
-				workSize -= workSizeBase * 16;
+				ws -= workSizeBase * 16;
 			else if(basis > targetFPSBasis * 2)
-				workSize -= workSizeBase * 4;
+				ws -= workSizeBase * 4;
 			else if(basis > targetFPSBasis)
-				workSize -= workSizeBase;
+				ws -= workSizeBase;
 
-			if(workSize < workSizeBase)
-				workSize = workSizeBase;
-			else if(workSize > DiabloMiner.TWO32 / totalVectors - 1)
-				workSize = DiabloMiner.TWO32 / totalVectors - 1;
+			if(ws < workSizeBase)
+				ws = workSizeBase;
+			else if(ws > DiabloMiner.TWO32 / totalVectors - 1)
+				ws = DiabloMiner.TWO32 / totalVectors - 1;
 
 			lastRuns = currentRuns;
 			lastTime = now;
+
+			workSize.set(ws);
 		}
 	}
 
@@ -417,7 +420,7 @@ public class GPUDeviceState extends DeviceState {
 					outputIndex = (outputIndex == 0) ? 1 : 0;
 				}
 
-				long increment = workSize;
+				long increment = workSize.get();
 				requestedNewWork = skipUnmap = workState.update(increment);
 
 				if(!requestedNewWork) {
@@ -496,7 +499,7 @@ public class GPUDeviceState extends DeviceState {
 							diabloMiner.debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
 							skipUnmap = true;
 						} else if(err == CL10.CL_INVALID_GLOBAL_OFFSET) {
-							diabloMiner.error("Spurious CL_INVALID_GLOBAL_OFFSET error, offset: " + workBase.get(0));
+							diabloMiner.error("Spurious CL_INVALID_GLOBAL_OFFSET error, offset: " + workState.getBase() + ", work size: " + increment);
 							skipUnmap = true;
 						} else {
 							outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS, null, null, null);
