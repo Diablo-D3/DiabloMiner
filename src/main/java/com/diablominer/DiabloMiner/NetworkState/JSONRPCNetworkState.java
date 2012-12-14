@@ -72,244 +72,251 @@ public class JSONRPCNetworkState extends NetworkState {
 	}
 
 	JsonNode doJSONRPCCall(boolean longPoll, ObjectNode message) throws IOException {
-		HttpURLConnection connection;
-		URL url;
-
-		if(longPoll)
-			url = longPollUrl;
-		else
-			url = queryUrl;
-
-		Proxy proxy = diabloMiner.getProxy();
-
-		if(proxy == null)
-			connection = (HttpURLConnection) url.openConnection();
-		else
-			connection = (HttpURLConnection) url.openConnection(proxy);
-
-		if(longPoll) {
-			connection.setConnectTimeout(10 * 60 * 1000);
-			connection.setReadTimeout(10 * 60 * 1000);
-		} else {
-			connection.setConnectTimeout(15 * 1000);
-			connection.setReadTimeout(15 * 1000);
-		}
-
-		connection.setRequestProperty("Authorization", userPass);
-		connection.setRequestProperty("Accept", "application/json");
-		connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
-		connection.setRequestProperty("Content-Type", "application/json");
-		connection.setRequestProperty("Cache-Control", "no-cache");
-		connection.setRequestProperty("User-Agent", "DiabloMiner");
-		connection.setRequestProperty("X-Mining-Extensions", "longpoll rollntime switchto");
-		connection.setDoOutput(true);
-
-		OutputStream requestStream = connection.getOutputStream();
-		Writer request = new OutputStreamWriter(requestStream);
-		request.write(message.toString());
-		request.close();
-		requestStream.close();
-
-		ObjectNode responseMessage = null;
-
-		InputStream responseStream = null;
-
+      HttpURLConnection connection = null;
 		try {
-			String xLongPolling = connection.getHeaderField("X-Long-Polling");
+	      URL url;
 
-			if(xLongPolling != null && !"".equals(xLongPolling) && longPollAsync == null) {
-				if(xLongPolling.startsWith("http"))
-					longPollUrl = new URL(xLongPolling);
-				else if(xLongPolling.startsWith("/"))
-					longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(), xLongPolling);
-				else
-					longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(), (url.getFile() + "/" + xLongPolling).replace("//", "/"));
+	      if(longPoll)
+	      	url = longPollUrl;
+	      else
+	      	url = queryUrl;
 
-				longPollAsync = new LongPollAsync();
-				Thread thread = new Thread(longPollAsync, "DiabloMiner JSONRPC LongPollAsync for " + url.getHost());
-				thread.start();
-				diabloMiner.addThread(thread);
+	      Proxy proxy = diabloMiner.getProxy();
 
-				workLifetime = 60000;
+	      if(proxy == null)
+	      	connection = (HttpURLConnection) url.openConnection();
+	      else
+	      	connection = (HttpURLConnection) url.openConnection(proxy);
 
-				diabloMiner.debug(queryUrl.getHost() + ": Enabling long poll support");
-			}
+	      if(longPoll) {
+	      	connection.setConnectTimeout(10 * 60 * 1000);
+	      	connection.setReadTimeout(10 * 60 * 1000);
+	      } else {
+	      	connection.setConnectTimeout(15 * 1000);
+	      	connection.setReadTimeout(15 * 1000);
+	      }
 
-			String xRollNTime = connection.getHeaderField("X-Roll-NTime");
+	      connection.setRequestProperty("Authorization", userPass);
+	      connection.setRequestProperty("Accept", "application/json");
+	      connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
+	      connection.setRequestProperty("Content-Type", "application/json");
+	      connection.setRequestProperty("Cache-Control", "no-cache");
+	      connection.setRequestProperty("User-Agent", "DiabloMiner");
+	      connection.setRequestProperty("X-Mining-Extensions", "longpoll rollntime switchto");
+	      connection.setDoOutput(true);
 
-			if(xRollNTime != null && !"".equals(xRollNTime)) {
-				if(!"n".equalsIgnoreCase(xRollNTime) && rollNTime == false) {
-					rollNTime = true;
+	      OutputStream requestStream = connection.getOutputStream();
+	      Writer request = new OutputStreamWriter(requestStream);
+	      request.write(message.toString());
+	      request.close();
+	      requestStream.close();
 
-					if(xRollNTime.startsWith("expire=")) {
-						try {
-							workLifetime = Integer.parseInt(xRollNTime.substring(7)) * 1000;
-						} catch(NumberFormatException ex) { }
-					} else {
-						workLifetime = 60000;
-					}
+	      ObjectNode responseMessage = null;
 
-					diabloMiner.debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + (workLifetime / 1000) + " seconds");
-				} else if("n".equalsIgnoreCase(xRollNTime) && rollNTime == true) {
-					rollNTime = false;
+	      InputStream responseStream = null;
 
-					if(longPoll)
-						workLifetime = 60000;
-					else
-						workLifetime = diabloMiner.getWorkLifetime();
+	      try {
+	      	String xLongPolling = connection.getHeaderField("X-Long-Polling");
 
-					diabloMiner.debug(queryUrl.getHost() + ": Disabling roll ntime support");
-				}
-			}
+	      	if(xLongPolling != null && !"".equals(xLongPolling) && longPollAsync == null) {
+	      		if(xLongPolling.startsWith("http"))
+	      			longPollUrl = new URL(xLongPolling);
+	      		else if(xLongPolling.startsWith("/"))
+	      			longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(), xLongPolling);
+	      		else
+	      			longPollUrl = new URL(queryUrl.getProtocol(), queryUrl.getHost(), queryUrl.getPort(), (url.getFile() + "/" + xLongPolling).replace("//", "/"));
 
-			String xSwitchTo = connection.getHeaderField("X-Switch-To");
+	      		longPollAsync = new LongPollAsync();
+	      		Thread thread = new Thread(longPollAsync, "DiabloMiner JSONRPC LongPollAsync for " + url.getHost());
+	      		thread.start();
+	      		diabloMiner.addThread(thread);
 
-			if(xSwitchTo != null && !"".equals(xSwitchTo)) {
-				String oldHost = queryUrl.getHost();
-				JsonNode newHost = mapper.readTree(xSwitchTo);
+	      		workLifetime = 60000;
 
-				queryUrl = new URL(queryUrl.getProtocol(), newHost.get("host").asText(), newHost.get("port").getIntValue(), queryUrl.getPath());
+	      		diabloMiner.debug(queryUrl.getHost() + ": Enabling long poll support");
+	      	}
 
-				if(longPollUrl != null)
-					longPollUrl = new URL(longPollUrl.getProtocol(), newHost.get("host").asText(), newHost.get("port").getIntValue(), longPollUrl.getPath());
+	      	String xRollNTime = connection.getHeaderField("X-Roll-NTime");
 
-				diabloMiner.info(oldHost + ": Switched to " + queryUrl.getHost());
-			}
+	      	if(xRollNTime != null && !"".equals(xRollNTime)) {
+	      		if(!"n".equalsIgnoreCase(xRollNTime) && rollNTime == false) {
+	      			rollNTime = true;
 
-			String xRejectReason = connection.getHeaderField("X-Reject-Reason");
+	      			if(xRollNTime.startsWith("expire=")) {
+	      				try {
+	      					workLifetime = Integer.parseInt(xRollNTime.substring(7)) * 1000;
+	      				} catch(NumberFormatException ex) { }
+	      			} else {
+	      				workLifetime = 60000;
+	      			}
 
-			if(xRejectReason != null && !"".equals(xRejectReason)) {
-				rejectReason = xRejectReason;
-			}
+	      			diabloMiner.debug(queryUrl.getHost() + ": Enabling roll ntime support, expire after " + (workLifetime / 1000) + " seconds");
+	      		} else if("n".equalsIgnoreCase(xRollNTime) && rollNTime == true) {
+	      			rollNTime = false;
 
-			String xIsP2Pool = connection.getHeaderField("X-Is-P2Pool");
+	      			if(longPoll)
+	      				workLifetime = 60000;
+	      			else
+	      				workLifetime = diabloMiner.getWorkLifetime();
 
-			if(xIsP2Pool != null && !"".equals(xIsP2Pool)) {
-				if(!noDelay)
-					diabloMiner.info("P2Pool no delay mode enabled");
+	      			diabloMiner.debug(queryUrl.getHost() + ": Disabling roll ntime support");
+	      		}
+	      	}
 
-				noDelay = true;
-			}
+	      	String xSwitchTo = connection.getHeaderField("X-Switch-To");
 
-			if(connection.getContentEncoding() != null) {
-				if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
-					responseStream = new GZIPInputStream(connection.getInputStream());
-				else if(connection.getContentEncoding().equalsIgnoreCase("deflate"))
-					responseStream = new InflaterInputStream(connection.getInputStream());
-			} else {
-				responseStream = connection.getInputStream();
-			}
+	      	if(xSwitchTo != null && !"".equals(xSwitchTo)) {
+	      		String oldHost = queryUrl.getHost();
+	      		JsonNode newHost = mapper.readTree(xSwitchTo);
 
-			if(responseStream == null)
-				throw new IOException("Drop to error handler");
+	      		queryUrl = new URL(queryUrl.getProtocol(), newHost.get("host").asText(), newHost.get("port").getIntValue(), queryUrl.getPath());
 
-			Object output = mapper.readTree(responseStream);
+	      		if(longPollUrl != null)
+	      			longPollUrl = new URL(longPollUrl.getProtocol(), newHost.get("host").asText(), newHost.get("port").getIntValue(), longPollUrl.getPath());
 
-			if(NullNode.class.equals(output.getClass())) {
-				throw new IOException("Bitcoin returned unparsable JSON");
-			} else {
-				try {
-					responseMessage = (ObjectNode) output;
-				} catch(ClassCastException e) {
-					throw new IOException("Bitcoin returned unparsable JSON");
-				}
-			}
+	      		diabloMiner.info(oldHost + ": Switched to " + queryUrl.getHost());
+	      	}
 
-			responseStream.close();
-		} catch(JsonProcessingException e) {
-			throw new IOException("Bitcoin returned unparsable JSON");
-		} catch(IOException e) {
-			InputStream errorStream = null;
-			IOException e2 = null;
+	      	String xRejectReason = connection.getHeaderField("X-Reject-Reason");
 
-			if(connection.getErrorStream() == null)
-				throw new IOException("Bitcoin disconnected during response: " + connection.getResponseCode() + " " + connection.getResponseMessage());
+	      	if(xRejectReason != null && !"".equals(xRejectReason)) {
+	      		rejectReason = xRejectReason;
+	      	}
 
-			if(connection.getContentEncoding() != null) {
-				if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
-					errorStream = new GZIPInputStream(connection.getErrorStream());
-				else if(connection.getContentEncoding().equalsIgnoreCase("deflate"))
-					errorStream = new InflaterInputStream(connection.getErrorStream());
-			} else {
-				errorStream = connection.getErrorStream();
-			}
+	      	String xIsP2Pool = connection.getHeaderField("X-Is-P2Pool");
 
-			if(errorStream == null)
-				throw new IOException("Bitcoin disconnected during response: " + connection.getResponseCode() + " " + connection.getResponseMessage());
+	      	if(xIsP2Pool != null && !"".equals(xIsP2Pool)) {
+	      		if(!noDelay)
+	      			diabloMiner.info("P2Pool no delay mode enabled");
 
-			byte[] errorbuf = new byte[8192];
+	      		noDelay = true;
+	      	}
 
-			if(errorStream.read(errorbuf) < 1)
-				throw new IOException("Bitcoin returned an error, but with no message");
+	      	if(connection.getContentEncoding() != null) {
+	      		if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
+	      			responseStream = new GZIPInputStream(connection.getInputStream());
+	      		else if(connection.getContentEncoding().equalsIgnoreCase("deflate"))
+	      			responseStream = new InflaterInputStream(connection.getInputStream());
+	      	} else {
+	      		responseStream = connection.getInputStream();
+	      	}
 
-			String error = new String(errorbuf).trim();
+	      	if(responseStream == null)
+	      		throw new IOException("Drop to error handler");
 
-			if(error.startsWith("{")) {
-				try {
-					Object output = mapper.readTree(error);
+	      	Object output = mapper.readTree(responseStream);
 
-					if(NullNode.class.equals(output.getClass()))
-						throw new IOException("Bitcoin returned an error message: " + error);
-					else
-						try {
-							responseMessage = (ObjectNode) output;
-						} catch(ClassCastException f) {
-							throw new IOException("Bitcoin returned unparsable JSON");
-						}
+	      	if(NullNode.class.equals(output.getClass())) {
+	      		throw new IOException("Bitcoin returned unparsable JSON");
+	      	} else {
+	      		try {
+	      			responseMessage = (ObjectNode) output;
+	      		} catch(ClassCastException e) {
+	      			throw new IOException("Bitcoin returned unparsable JSON");
+	      		}
+	      	}
 
-					if(responseMessage.get("error") != null) {
-						if(responseMessage.get("error").get("message") != null && responseMessage.get("error").get("message").asText() != null) {
-							error = responseMessage.get("error").get("message").asText().trim();
-							e2 = new IOException("Bitcoin returned error message: " + error);
-						} else if(responseMessage.get("error").asText() != null) {
-							error = responseMessage.get("error").asText().trim();
+	      	responseStream.close();
+	      } catch(JsonProcessingException e) {
+	      	throw new IOException("Bitcoin returned unparsable JSON");
+	      } catch(IOException e) {
+	      	InputStream errorStream = null;
+	      	IOException e2 = null;
 
-							if(!"null".equals(error) && !"".equals(error))
-								e2 = new IOException("Bitcoin returned an error message: " + error);
-						}
-					}
-				} catch(JsonProcessingException f) {
-					e2 = new IOException("Bitcoin returned unparsable JSON");
-				}
-			} else {
-				e2 = new IOException("Bitcoin returned an error message: " + error);
-			}
+	      	if(connection.getErrorStream() == null)
+	      		throw new IOException("Bitcoin disconnected during response: " + connection.getResponseCode() + " " + connection.getResponseMessage());
 
-			errorStream.close();
+	      	if(connection.getContentEncoding() != null) {
+	      		if(connection.getContentEncoding().equalsIgnoreCase("gzip"))
+	      			errorStream = new GZIPInputStream(connection.getErrorStream());
+	      		else if(connection.getContentEncoding().equalsIgnoreCase("deflate"))
+	      			errorStream = new InflaterInputStream(connection.getErrorStream());
+	      	} else {
+	      		errorStream = connection.getErrorStream();
+	      	}
 
-			if(responseStream != null)
-				responseStream.close();
+	      	if(errorStream == null)
+	      		throw new IOException("Bitcoin disconnected during response: " + connection.getResponseCode() + " " + connection.getResponseMessage());
 
-			if(e2 == null)
-				e2 = new IOException("Bitcoin returned an error, but with no message");
+	      	byte[] errorbuf = new byte[8192];
 
-			throw e2;
-		}
+	      	if(errorStream.read(errorbuf) < 1)
+	      		throw new IOException("Bitcoin returned an error, but with no message");
 
-		if(responseMessage.get("error") != null) {
-			if(responseMessage.get("error").get("message") != null && responseMessage.get("error").get("message").asText() != null) {
-				String error = responseMessage.get("error").get("message").asText().trim();
-				throw new IOException("Bitcoin returned error message: " + error);
-			} else if(responseMessage.get("error").asText() != null) {
-				String error = responseMessage.get("error").asText().trim();
+	      	String error = new String(errorbuf).trim();
 
-				if(!"null".equals(error) && !"".equals(error))
-					throw new IOException("Bitcoin returned error message: " + error);
-			}
-		}
+	      	if(error.startsWith("{")) {
+	      		try {
+	      			Object output = mapper.readTree(error);
 
-		JsonNode result;
+	      			if(NullNode.class.equals(output.getClass()))
+	      				throw new IOException("Bitcoin returned an error message: " + error);
+	      			else
+	      				try {
+	      					responseMessage = (ObjectNode) output;
+	      				} catch(ClassCastException f) {
+	      					throw new IOException("Bitcoin returned unparsable JSON");
+	      				}
 
-		try {
-			result = responseMessage.get("result");
-		} catch(Exception e) {
-			throw new IOException("Bitcoin returned unparsable JSON");
-		}
+	      			if(responseMessage.get("error") != null) {
+	      				if(responseMessage.get("error").get("message") != null && responseMessage.get("error").get("message").asText() != null) {
+	      					error = responseMessage.get("error").get("message").asText().trim();
+	      					e2 = new IOException("Bitcoin returned error message: " + error);
+	      				} else if(responseMessage.get("error").asText() != null) {
+	      					error = responseMessage.get("error").asText().trim();
 
-		if(result == null)
-			throw new IOException("Bitcoin did not return a result or an error");
+	      					if(!"null".equals(error) && !"".equals(error))
+	      						e2 = new IOException("Bitcoin returned an error message: " + error);
+	      				}
+	      			}
+	      		} catch(JsonProcessingException f) {
+	      			e2 = new IOException("Bitcoin returned unparsable JSON");
+	      		}
+	      	} else {
+	      		e2 = new IOException("Bitcoin returned an error message: " + error);
+	      	}
 
-		return result;
+	      	errorStream.close();
+
+	      	if(responseStream != null)
+	      		responseStream.close();
+
+	      	if(e2 == null)
+	      		e2 = new IOException("Bitcoin returned an error, but with no message");
+
+	      	throw e2;
+	      }
+
+	      if(responseMessage.get("error") != null) {
+	      	if(responseMessage.get("error").get("message") != null && responseMessage.get("error").get("message").asText() != null) {
+	      		String error = responseMessage.get("error").get("message").asText().trim();
+	      		throw new IOException("Bitcoin returned error message: " + error);
+	      	} else if(responseMessage.get("error").asText() != null) {
+	      		String error = responseMessage.get("error").asText().trim();
+
+	      		if(!"null".equals(error) && !"".equals(error))
+	      			throw new IOException("Bitcoin returned error message: " + error);
+	      	}
+	      }
+
+	      JsonNode result;
+
+	      try {
+	      	result = responseMessage.get("result");
+	      } catch(Exception e) {
+	      	throw new IOException("Bitcoin returned unparsable JSON");
+	      }
+
+	      if(result == null)
+	      	throw new IOException("Bitcoin did not return a result or an error");
+
+	      return result;
+      } catch(IOException e) {
+      	if(connection != null)
+      		connection.disconnect();
+
+	      throw e;
+      }
 	}
 
 	WorkState doGetWorkMessage(boolean longPoll) throws IOException {
