@@ -32,6 +32,8 @@ abstract public class DeviceState {
 	double basis;
 	AtomicLong deviceHashCount = new AtomicLong(0);
 
+	long resetNetworkState;
+
 	abstract public void checkDevice();
 
 	public double getBasis() {

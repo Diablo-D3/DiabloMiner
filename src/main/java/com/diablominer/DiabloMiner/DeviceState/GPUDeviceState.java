@@ -69,6 +69,8 @@ public class GPUDeviceState extends DeviceState {
 	   this.diabloMiner = hardwareType.getDiabloMiner();
 	   this.deviceName = deviceName;
 
+	   this.resetNetworkState = DiabloMiner.now();
+
 	   this.executions = new ExecutionState[GPUHardwareType.EXECUTION_TOTAL];
 
 		boolean hasBitAlign;
@@ -445,7 +447,16 @@ public class GPUDeviceState extends DeviceState {
 
 				long workBase = workState.getBase();
 				long increment = workSize.get();
-				requestedNewWork = skipUnmap = workState.update(increment);
+
+
+				if(DiabloMiner.now() - 3600000 > resetNetworkState) {
+					resetNetworkState = DiabloMiner.now();
+
+					diabloMiner.getNetworkStateHead().addGetQueue(this);
+					requestedNewWork = skipUnmap = true;
+				} else {
+					requestedNewWork = skipUnmap = workState.update(increment);
+				}
 
 				if(!requestedNewWork) {
 					diabloMiner.addAndGetHashCount(increment);
