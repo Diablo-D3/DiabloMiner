@@ -28,6 +28,7 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.LWJGLUtil;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.opencl.CL10;
+import org.lwjgl.opencl.CL12;
 import org.lwjgl.opencl.CLCommandQueue;
 import org.lwjgl.opencl.CLContext;
 import org.lwjgl.opencl.CLContextCallback;
@@ -43,8 +44,8 @@ import com.diablominer.DiabloMiner.NetworkState.WorkState;
 
 public class GPUDeviceState extends DeviceState {
 	final static int OUTPUTS = 16;
-	final static ByteBuffer EMPTY_BUFFER = BufferUtils.createByteBuffer(4 * OUTPUTS);
 
+	final float platform_version;
 	final CLDevice device;
 	final CLContext context;
 	final CLKernel kernel;
@@ -64,14 +65,15 @@ public class GPUDeviceState extends DeviceState {
 
 	GPUHardwareType hardwareType;
 
-	GPUDeviceState(GPUHardwareType hardwareType, String deviceName, CLPlatform platform, CLDevice device) throws DiabloMinerFatalException {
+	GPUDeviceState(GPUHardwareType hardwareType, String deviceName, CLPlatform platform, float platform_version, CLDevice device) throws DiabloMinerFatalException {
+		this.platform_version = platform_version;
 		this.hardwareType = hardwareType;
-	   this.diabloMiner = hardwareType.getDiabloMiner();
-	   this.deviceName = deviceName;
+		this.diabloMiner = hardwareType.getDiabloMiner();
+		this.deviceName = deviceName;
 
-	   this.resetNetworkState = DiabloMiner.now();
+		this.resetNetworkState = DiabloMiner.now();
 
-	   this.executions = new ExecutionState[GPUHardwareType.EXECUTION_TOTAL];
+		this.executions = new ExecutionState[GPUHardwareType.EXECUTION_TOTAL];
 
 		boolean hasBitAlign;
 		boolean hasBFI_INT = false;
@@ -103,21 +105,7 @@ public class GPUDeviceState extends DeviceState {
 			hasBitAlign = false;
 
 		if(hasBitAlign) {
-			if(deviceName.contains("Cedar") ||
-				deviceName.contains("Redwood") ||
-				deviceName.contains("Juniper") ||
-				deviceName.contains("Cypress") ||
-				deviceName.contains("Hemlock") ||
-				deviceName.contains("Caicos") ||
-				deviceName.contains("Turks") ||
-				deviceName.contains("Barts") ||
-				deviceName.contains("Cayman") ||
-				deviceName.contains("Antilles") ||
-				deviceName.contains("Palm") ||
-				deviceName.contains("Sumo") ||
-				deviceName.contains("Wrestler") ||
-				deviceName.contains("WinterPark") ||
-				deviceName.contains("BeaverCreek"))
+			if(deviceName.contains("Cedar") || deviceName.contains("Redwood") || deviceName.contains("Juniper") || deviceName.contains("Cypress") || deviceName.contains("Hemlock") || deviceName.contains("Caicos") || deviceName.contains("Turks") || deviceName.contains("Barts") || deviceName.contains("Cayman") || deviceName.contains("Antilles") || deviceName.contains("Palm") || deviceName.contains("Sumo") || deviceName.contains("Wrestler") || deviceName.contains("WinterPark") || deviceName.contains("BeaverCreek"))
 				hasBFI_INT = true;
 		}
 
@@ -253,13 +241,13 @@ public class GPUDeviceState extends DeviceState {
 		workSize.set(workSizeBase * 16);
 
 		for(int i = 0; i < GPUHardwareType.EXECUTION_TOTAL; i++) {
-			String executorName =  deviceName + "/" + i;
+			String executorName = deviceName + "/" + i;
 			executions[i] = this.new GPUExecutionState(executorName);
 			Thread thread = new Thread(executions[i], "DiabloMiner Executor (" + executorName + ")");
 			thread.start();
 			diabloMiner.addThread(thread);
 		}
-   }
+	}
 
 	public void checkDevice() {
 		long now = DiabloMiner.now();
@@ -273,9 +261,9 @@ public class GPUDeviceState extends DeviceState {
 			basis = (double) elapsed / (double) (currentRuns - lastRuns);
 
 			if(basis < targetFPSBasis / 4)
-				ws += workSizeBase  * 16;
+				ws += workSizeBase * 16;
 			else if(basis < targetFPSBasis / 2)
-				ws += workSizeBase  * 4;
+				ws += workSizeBase * 4;
 			else if(basis < targetFPSBasis)
 				ws += workSizeBase;
 			else if(basis > targetFPSBasis * 4)
@@ -301,6 +289,7 @@ public class GPUDeviceState extends DeviceState {
 		final CLCommandQueue queue;
 
 		final CLMem output[] = new CLMem[2];
+		final CLMem blank;
 		ByteBuffer outputBuffer;
 		int outputIndex = 0;
 
@@ -320,14 +309,14 @@ public class GPUDeviceState extends DeviceState {
 		byte[] digestOutput;
 
 		public GPUExecutionState(String executionName) throws DiabloMinerFatalException {
-	      super(executionName);
+			super(executionName);
 
-	      try {
-	      	digestInside = MessageDigest.getInstance("SHA-256");
-	      	digestOutside = MessageDigest.getInstance("SHA-256");
-	      } catch (NoSuchAlgorithmException e) {
-	      	throw new DiabloMinerFatalException(diabloMiner, "Your Java implementation does not have a MessageDigest for SHA-256");
-	      }
+			try {
+				digestInside = MessageDigest.getInstance("SHA-256");
+				digestOutside = MessageDigest.getInstance("SHA-256");
+			} catch(NoSuchAlgorithmException e) {
+				throw new DiabloMinerFatalException(diabloMiner, "Your Java implementation does not have a MessageDigest for SHA-256");
+			}
 
 			queue = CL10.clCreateCommandQueue(context, device, 0, errBuffer);
 
@@ -335,23 +324,41 @@ public class GPUDeviceState extends DeviceState {
 				throw new DiabloMinerFatalException(diabloMiner, "Failed to allocate queue");
 			}
 
+			IntBuffer blankinit = BufferUtils.createIntBuffer(OUTPUTS * 4);
+
+			for(int i = 0; i < OUTPUTS; i++)
+				blankinit.put(0);
+
+			blankinit.rewind();
+
+			if(platform_version == 1.1)
+				blank = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_READ_ONLY, blankinit, errBuffer);
+			else
+				blank = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_READ_ONLY | CL12.CL_MEM_HOST_NO_ACCESS, blankinit, errBuffer);
+
+			if(blank == null || errBuffer.get(0) != CL10.CL_SUCCESS)
+				throw new DiabloMinerFatalException(diabloMiner, "Failed to allocate blank buffer");
+
+			blankinit.rewind();
+
 			for(int i = 0; i < 2; i++) {
-				output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_WRITE_ONLY | CL10.CL_MEM_ALLOC_HOST_PTR | CL10.CL_MEM_COPY_HOST_PTR,
-					EMPTY_BUFFER, errBuffer);
+				if(platform_version == 1.1)
+					output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_WRITE_ONLY, blankinit, errBuffer);
+				else
+					output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_WRITE_ONLY | CL12.CL_MEM_HOST_READ_ONLY, blankinit, errBuffer);
 
-				EMPTY_BUFFER.position(0);
+				blankinit.rewind();
 
-				if(output == null || errBuffer.get(0) != CL10.CL_SUCCESS) {
+				if(output[i] == null || errBuffer.get(0) != CL10.CL_SUCCESS) {
 					throw new DiabloMinerFatalException(diabloMiner, "Failed to allocate output buffer");
 				}
 			}
 
-			outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS,
-				null,	null, null);
+			outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ, 0, OUTPUTS * 4, null, null, null);
 
 			diabloMiner.getNetworkStateHead().addGetQueue(this);
 			requestedNewWork = true;
-      }
+		}
 
 		public void run() {
 			boolean submittedBlock;
@@ -369,11 +376,11 @@ public class GPUDeviceState extends DeviceState {
 				WorkState workIncoming = null;
 
 				if(requestedNewWork) {
-               try {
-                  workIncoming = incomingQueue.take();
-               } catch(InterruptedException f) {
-               	continue;
-               }
+					try {
+						workIncoming = incomingQueue.take();
+					} catch(InterruptedException f) {
+						continue;
+					}
 				} else {
 					workIncoming = incomingQueue.poll();
 				}
@@ -397,17 +404,9 @@ public class GPUDeviceState extends DeviceState {
 
 							digestOutput = digestOutside.digest(digestInside.digest(digestInput.array()));
 
-							long G =
-								((long) (0xFF & digestOutput[27]) << 24) |
-								((long) (0xFF & digestOutput[26]) << 16) |
-								((long) (0xFF & digestOutput[25]) << 8) |
-								((long) (0xFF & digestOutput[24]));
+							long G = ((long) (0xFF & digestOutput[27]) << 24) | ((long) (0xFF & digestOutput[26]) << 16) | ((long) (0xFF & digestOutput[25]) << 8) | ((long) (0xFF & digestOutput[24]));
 
-							long H =
-								((long) (0xFF & digestOutput[31]) << 24) |
-								((long) (0xFF & digestOutput[30]) << 16) |
-								((long) (0xFF & digestOutput[29]) << 8) |
-								((long) (0xFF & digestOutput[28]));
+							long H = ((long) (0xFF & digestOutput[31]) << 24) | ((long) (0xFF & digestOutput[30]) << 16) | ((long) (0xFF & digestOutput[29]) << 8) | ((long) (0xFF & digestOutput[28]));
 
 							if(H == 0) {
 								diabloMiner.debug("Attempt " + diabloMiner.incrementAttempts() + " from " + executionName);
@@ -426,18 +425,15 @@ public class GPUDeviceState extends DeviceState {
 
 					if(hwError && submittedBlock == false) {
 						if(hwcheck && !diabloMiner.getDebug())
-							diabloMiner.error("Invalid solution " + diabloMiner.incrementHWErrors() + " from " +
-								deviceName + ", possible driver or hardware issue");
+							diabloMiner.error("Invalid solution " + diabloMiner.incrementHWErrors() + " from " + deviceName + ", possible driver or hardware issue");
 						else
-							diabloMiner.debug("Invalid solution " + diabloMiner.incrementHWErrors() + " from " +
-								executionName + ", possible driver or hardware issue");
-					}
-
-					if(resetBuffer) {
-						outputBuffer.put(EMPTY_BUFFER);
-						EMPTY_BUFFER.position(0);
+							diabloMiner.debug("Invalid solution " + diabloMiner.incrementHWErrors() + " from " + executionName + ", possible driver or hardware issue");
 					}
 				}
+
+
+				if(resetBuffer)
+					CL10.clEnqueueCopyBuffer(queue, blank, output[outputIndex], 0, 0, OUTPUTS * 4, null, null);
 
 				if(!skipUnmap) {
 					CL10.clEnqueueUnmapMemObject(queue, output[outputIndex], outputBuffer, null, null);
@@ -445,9 +441,10 @@ public class GPUDeviceState extends DeviceState {
 					outputIndex = (outputIndex == 0) ? 1 : 0;
 				}
 
+
+
 				long workBase = workState.getBase();
 				long increment = workSize.get();
-
 
 				if(DiabloMiner.now() - 3600000 > resetNetworkState) {
 					resetNetworkState = DiabloMiner.now();
@@ -472,19 +469,15 @@ public class GPUDeviceState extends DeviceState {
 					DiabloMiner.sharound(midstate2, 7, 0, 1, 2, 3, 4, 5, 6, workState.getData(17), 0x71374491);
 					DiabloMiner.sharound(midstate2, 6, 7, 0, 1, 2, 3, 4, 5, workState.getData(18), 0xB5C0FBCF);
 
-					int W16 = workState.getData(16) + (DiabloMiner.rot(workState.getData(17), 7) ^ DiabloMiner.rot(workState.getData(17), 18) ^
-						(workState.getData(17) >>> 3));
-					int W17 = workState.getData(17) + (DiabloMiner.rot(workState.getData(18), 7) ^ DiabloMiner.rot(workState.getData(18), 18) ^
-						(workState.getData(18) >>> 3)) + 0x01100000;
+					int W16 = workState.getData(16) + (DiabloMiner.rot(workState.getData(17), 7) ^ DiabloMiner.rot(workState.getData(17), 18) ^ (workState.getData(17) >>> 3));
+					int W17 = workState.getData(17) + (DiabloMiner.rot(workState.getData(18), 7) ^ DiabloMiner.rot(workState.getData(18), 18) ^ (workState.getData(18) >>> 3)) + 0x01100000;
 					int W18 = workState.getData(18) + (DiabloMiner.rot(W16, 17) ^ DiabloMiner.rot(W16, 19) ^ (W16 >>> 10));
 					int W19 = 0x11002000 + (DiabloMiner.rot(W17, 17) ^ DiabloMiner.rot(W17, 19) ^ (W17 >>> 10));
 					int W31 = 0x00000280 + (DiabloMiner.rot(W16, 7) ^ DiabloMiner.rot(W16, 18) ^ (W16 >>> 3));
 					int W32 = W16 + (DiabloMiner.rot(W17, 7) ^ DiabloMiner.rot(W17, 18) ^ (W17 >>> 3));
 
-					int PreVal4 = workState.getMidstate(4) + (DiabloMiner.rot(midstate2[1], 6) ^ DiabloMiner.rot(midstate2[1], 11) ^
-						DiabloMiner.rot(midstate2[1], 25)) + (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
-					int T1 = (DiabloMiner.rot(midstate2[5], 2) ^ DiabloMiner.rot(midstate2[5], 13) ^ DiabloMiner.rot(midstate2[5], 22)) +
-						((midstate2[5] & midstate2[6]) | (midstate2[7] & (midstate2[5] | midstate2[6])));
+					int PreVal4 = workState.getMidstate(4) + (DiabloMiner.rot(midstate2[1], 6) ^ DiabloMiner.rot(midstate2[1], 11) ^ DiabloMiner.rot(midstate2[1], 25)) + (midstate2[3] ^ (midstate2[1] & (midstate2[2] ^ midstate2[3]))) + 0xe9b5dba5;
+					int T1 = (DiabloMiner.rot(midstate2[5], 2) ^ DiabloMiner.rot(midstate2[5], 13) ^ DiabloMiner.rot(midstate2[5], 22)) + ((midstate2[5] & midstate2[6]) | (midstate2[7] & (midstate2[5] | midstate2[6])));
 
 					int PreVal4_state0 = PreVal4 + workState.getMidstate(0);
 					int PreVal4_state0_k7 = (int) (PreVal4_state0 + 0xAB1C5ED5L);
@@ -494,42 +487,15 @@ public class GPUDeviceState extends DeviceState {
 					int W16_plus_K16 = (int) (W16 + 0xe49b69c1L);
 					int W17_plus_K17 = (int) (W17 + 0xefbe4786L);
 
-					kernel
-						.setArg(0, PreVal4_state0)
-						.setArg(1, PreVal4_state0_k7)
-						.setArg(2, PreVal4_T1)
-						.setArg(3, W18)
-						.setArg(4, W19)
-						.setArg(5, W16)
-						.setArg(6, W17)
-						.setArg(7, W16_plus_K16)
-						.setArg(8, W17_plus_K17)
-						.setArg(9, W31)
-						.setArg(10, W32)
-						.setArg(11, (int) (midstate2[3] + 0xB956c25bL))
-						.setArg(12, midstate2[1])
-						.setArg(13, midstate2[2])
-						.setArg(14, midstate2[7])
-						.setArg(15, midstate2[5])
-						.setArg(16, midstate2[6])
-						.setArg(17, C1_plus_K5)
-						.setArg(18, B1_plus_K6)
-						.setArg(19, workState.getMidstate(0))
-						.setArg(20, workState.getMidstate(1))
-						.setArg(21, workState.getMidstate(2))
-						.setArg(22, workState.getMidstate(3))
-						.setArg(23, workState.getMidstate(4))
-						.setArg(24, workState.getMidstate(5))
-						.setArg(25, workState.getMidstate(6))
-						.setArg(26, workState.getMidstate(7))
-						.setArg(27, output[outputIndex]);
+					kernel.setArg(0, PreVal4_state0).setArg(1, PreVal4_state0_k7).setArg(2, PreVal4_T1).setArg(3, W18).setArg(4, W19).setArg(5, W16).setArg(6, W17).setArg(7, W16_plus_K16).setArg(8, W17_plus_K17).setArg(9, W31).setArg(10, W32).setArg(11, (int) (midstate2[3] + 0xB956c25bL)).setArg(12, midstate2[1]).setArg(13, midstate2[2]).setArg(14, midstate2[7]).setArg(15, midstate2[5]).setArg(16, midstate2[6]).setArg(17, C1_plus_K5).setArg(18, B1_plus_K6).setArg(19, workState.getMidstate(0)).setArg(20, workState.getMidstate(1)).setArg(21, workState.getMidstate(2)).setArg(22, workState.getMidstate(3)).setArg(23, workState.getMidstate(4)).setArg(24, workState.getMidstate(5)).setArg(25, workState.getMidstate(6)).setArg(26, workState.getMidstate(7)).setArg(27, output[outputIndex]);
 
 					err = CL10.clEnqueueNDRangeKernel(queue, kernel, 1, workBaseBuffer, workSizeBuffer, localWorkSize, null, null);
 
 					if(err != CL10.CL_SUCCESS && err != CL10.CL_INVALID_KERNEL_ARGS && err != CL10.CL_INVALID_GLOBAL_OFFSET) {
 						try {
 							throw new DiabloMinerFatalException(diabloMiner, "Failed to queue kernel, error " + err);
-						} catch(DiabloMinerFatalException e) { }
+						} catch(DiabloMinerFatalException e) {
+						}
 					} else {
 						if(err == CL10.CL_INVALID_KERNEL_ARGS) {
 							diabloMiner.debug("Spurious CL_INVALID_KERNEL_ARGS error, ignoring");
@@ -538,12 +504,11 @@ public class GPUDeviceState extends DeviceState {
 							diabloMiner.error("Spurious CL_INVALID_GLOBAL_OFFSET error, offset: " + workBase + ", work size: " + increment);
 							skipUnmap = true;
 						} else {
-							outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ | CL10.CL_MAP_WRITE, 0, 4 * OUTPUTS,
-								null, null, null);
+							outputBuffer = CL10.clEnqueueMapBuffer(queue, output[outputIndex], 1, CL10.CL_MAP_READ, 0, OUTPUTS * 4, null, null, null);
 						}
 					}
 				}
 			}
-      }
+		}
 	}
 }
