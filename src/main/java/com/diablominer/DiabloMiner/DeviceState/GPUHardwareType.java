@@ -198,19 +198,19 @@ public class GPUHardwareType extends HardwareType {
 		int platformCount = 0;
 
 		for(CLPlatform platform : platforms) {
-			float version;
+			PlatformVersion version;
 
 			diabloMiner.info("Using " + platform.getInfoString(CL10.CL_PLATFORM_NAME).trim() + " " + platform.getInfoString(CL10.CL_PLATFORM_VERSION));
 
 			String versions = platform.getInfoString(CL10.CL_PLATFORM_VERSION);
 			if(versions.contains("OpenCL 1.0"))
-				version = 1.0f;
+				version = PlatformVersion.V1_0;
 			else if (versions.contains("OpenCL 1.1"))
-				version = 1.1f;
+				version = PlatformVersion.V1_1;
 			else
-				version = 1.2f;
+				version = PlatformVersion.V1_2;
 
-			if(version == 1.0) {
+			if(version == PlatformVersion.V1_0) {
 				diabloMiner.error("OpenCL platform " + platform.getInfoString(CL10.CL_PLATFORM_NAME).trim() + " is not OpenCL 1.1 or later");
 				continue;
 			}
