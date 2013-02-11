@@ -45,7 +45,7 @@ import com.diablominer.DiabloMiner.NetworkState.WorkState;
 public class GPUDeviceState extends DeviceState {
 	final static int OUTPUTS = 16;
 
-	final float platform_version;
+	final PlatformVersion platform_version;
 	final CLDevice device;
 	final CLContext context;
 	final CLKernel kernel;
@@ -65,7 +65,7 @@ public class GPUDeviceState extends DeviceState {
 
 	GPUHardwareType hardwareType;
 
-	GPUDeviceState(GPUHardwareType hardwareType, String deviceName, CLPlatform platform, float platform_version, CLDevice device) throws DiabloMinerFatalException {
+	GPUDeviceState(GPUHardwareType hardwareType, String deviceName, CLPlatform platform, PlatformVersion platform_version, CLDevice device) throws DiabloMinerFatalException {
 		this.platform_version = platform_version;
 		this.hardwareType = hardwareType;
 		this.diabloMiner = hardwareType.getDiabloMiner();
@@ -331,7 +331,7 @@ public class GPUDeviceState extends DeviceState {
 
 			blankinit.rewind();
 
-			if(platform_version == 1.1)
+			if(platform_version == PlatformVersion.V1_1)
 				blank = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_READ_ONLY, blankinit, errBuffer);
 			else
 				blank = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_READ_ONLY | CL12.CL_MEM_HOST_NO_ACCESS, blankinit, errBuffer);
@@ -342,7 +342,7 @@ public class GPUDeviceState extends DeviceState {
 			blankinit.rewind();
 
 			for(int i = 0; i < 2; i++) {
-				if(platform_version == 1.1)
+				if(platform_version == PlatformVersion.V1_1)
 					output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_WRITE_ONLY, blankinit, errBuffer);
 				else
 					output[i] = CL10.clCreateBuffer(context, CL10.CL_MEM_COPY_HOST_PTR | CL10.CL_MEM_WRITE_ONLY | CL12.CL_MEM_HOST_READ_ONLY, blankinit, errBuffer);
