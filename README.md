@@ -46,7 +46,9 @@ DiabloMiner from source, heed the above warning and run `mvn package`.
 #How to use#
 #Single pool and solo mining#
 `./DiabloMiner-YourOS.sh -u username -p password -o host -r port`
+
 or
+
 `./DiabloMiner-YourOS.sh -l http://username:password@host:port`
 
 For solo mining, your host is `localhost` your port is `8332`, and your
@@ -125,14 +127,14 @@ Cape Verde, Pitcairn, Tahiti, New Zealand, Malta, Bonaire
 Use defaults.
 
 #Command line arugments#
-*__-u, -p, -o, -r__ Username, password, host, port
-*__-l__ Fully fledged URL, ex: http://username:password@host:port/
-*__-x__ Proxy, ex: host:port<:username:password>
-*__-d__ Debug output
-*__-D__ Use specific devices. Default is all.
-*__-f__ FPS, controls how many kernel executions a second happen, default is 30
-*__-w__ Controls OpenCL workgroup size, default is hardware detected maximum
-*__-v__: Change manual SIMD parallel alignment.
+* __-u, -p, -o, -r__ Username, password, host, port
+* __-l__ Fully fledged URL, ex: http://username:password@host:port/
+* __-x__ Proxy, ex: host:port<:username:password>
+* __-d__ Debug output
+* __-D__ Use specific devices. Default is all.
+* __-f__ FPS, controls how many kernel executions a second happen, default is 30
+* __-w__ Controls OpenCL workgroup size, default is hardware detected maximum
+* __-v__: Change manual SIMD parallel alignment.
  * -v 1: The same as off_single hash, and is the default (`uint`)
  * -v 2 through 16: Tries more than one hash via SIMD (`uint2` through `uint16`)
  * -v 1,1, etc: Non-SIMD interleaved hashes, faster on a very small minority of
