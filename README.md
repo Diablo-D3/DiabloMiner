@@ -12,7 +12,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http:__www.gnu.org_licenses_>.
+    along with this program.  If not, see <http://www.gnu.org_licenses/>.
 
 #Warning#
 DiabloMiner is a command line program. This means you need to open a terminal
