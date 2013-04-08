@@ -135,8 +135,8 @@ Use defaults.
 * __-f__ FPS, controls how many kernel executions a second happen, default is 30
 * __-w__ Controls OpenCL workgroup size, default is hardware detected maximum
 * __-v__: Change manual SIMD parallel alignment.
- * -v 1: The same as off_single hash, and is the default (`uint`)
+ * -v 1: The same as off/single hash, and is the default (`uint`)
  * -v 2 through 16: Tries more than one hash via SIMD (`uint2` through `uint16`)
- * -v 1,1, etc: Non-SIMD interleaved hashes, faster on a very small minority of
-   hardware (`-v 2,1` is faster than `-v 2` on some VLIW5)
+ * -v 1,1, etc: Non-SIMD interleaving on top of SIMD, faster on a very small
+   minority of hardware (`-v 2,1` is faster than `-v 2` on some Radeon VLIW5)
 
