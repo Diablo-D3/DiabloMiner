@@ -45,9 +45,9 @@ DiabloMiner from source, heed the above warning and run `mvn package`.
 
 #How to use#
 #Single pool and solo mining#
-`./DiabloMiner-YourOS.sh -u _username_ -p _password_ -o _host_ -r _port_`
+`./DiabloMiner-YourOS.sh -u username -p password -o host -r port`
 or
-`./DiabloMiner-YourOS.sh -l http://_username_:_password_@_host_:_port_`
+`./DiabloMiner-YourOS.sh -l http://username:password@host:port`
 
 For solo mining, your host is `localhost` your port is `8332`, and your
 username and password is what you set in your bitcoind's `bitcoin.conf`.
@@ -55,8 +55,8 @@ See bitcoin documentation for further information on how to enable the RPC
 API.
 
 ##Multiple pools##
-`./DiabloMiner-YourOS.sh -u _username1_,_username2_ -p _password1_,_password2_
- -o _host1_,_host2_ -r _port1_,_port2_.
+`./DiabloMiner-YourOS.sh -u username1,username2 -p password1,password2
+ -o host1,host2 -r port1,port2`
 
 DiabloMiner supports unlimited pools and will switch to the next pool on
 connection failure and return to the first pool every 60 minutes.
@@ -75,7 +75,6 @@ R7xx
 
 * Radeon discrete: 43xx, 45xx, 46xx, 47xx, 48xx
 * Radeon mobile: 43xxM, 45xxM, 46xxM, 48xxM, 5xxV, 51xxM
-
 * FirePro: V3750, V7750, V8700, V8750, 2450, RG220
 * FirePro mobile: M7740
 * FireStream: 9250, 9270
@@ -126,16 +125,16 @@ Cape Verde, Pitcairn, Tahiti, New Zealand, Malta, Bonaire
 Use defaults.
 
 #Command line arugments#
-__-u, -p, -o, -r__ Username, password, host, port
-__-l__ Fully fledged URL, ex: http:__username:password@host:port_
-__-x__ Proxy, ex: host:port_:username:password_
-__-d__ Debug output
-__-D__ Use specific devices. Default is all.
-__-f__ FPS, controls how many kernel executions a second happen, default is 30
-__-w__ Controls OpenCL workgroup size, default is hardware detected maximum
-__-v__: Change manual SIMD parallel alignment.
--v 1: The same as off_single hash, and is the default (`uint`)
--v 2 through 16: Tries more than one hash via SIMD (`uint2` through `uint16`)
--v 1,1, etc: Non-SIMD interleaved hashes, faster on a very small minority of
-hardware (`-v 2,1` is faster than `-v 2` on some VLIW5)
+*__-u, -p, -o, -r__ Username, password, host, port
+*__-l__ Fully fledged URL, ex: http://username:password@host:port/
+*__-x__ Proxy, ex: host:port<:username:password>
+*__-d__ Debug output
+*__-D__ Use specific devices. Default is all.
+*__-f__ FPS, controls how many kernel executions a second happen, default is 30
+*__-w__ Controls OpenCL workgroup size, default is hardware detected maximum
+*__-v__: Change manual SIMD parallel alignment.
+ * -v 1: The same as off_single hash, and is the default (`uint`)
+ * -v 2 through 16: Tries more than one hash via SIMD (`uint2` through `uint16`)
+ * -v 1,1, etc: Non-SIMD interleaved hashes, faster on a very small minority of
+   hardware (`-v 2,1` is faster than `-v 2` on some VLIW5)
 
