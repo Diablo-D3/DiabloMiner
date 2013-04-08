@@ -1,7 +1,7 @@
 #DiabloMiner - OpenCL miner for BitCoin#
     Copyright (C) 2010 - 2013 Patrick McFarland <diablod3@gmail.com>
 
-    This program is free software: you can redistribute it and/or modify
+    This program is free software: you can redistribute it and_or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
@@ -12,14 +12,14 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    along with this program.  If not, see <http:__www.gnu.org_licenses_>.
 
 #Warning#
 DiabloMiner is a command line program. This means you need to open a terminal
 (cmd.exe, Terminal.app/iTerm2, xterm, etc) and run the program with the proper
 arguments from there.
 
-You /require/ hardware that is capable of running OpenCL.
+You __require__ hardware that is capable of running OpenCL.
 
 #MacOSX Warning#
 Apple's OpenCL drivers often exhibit strange bugs.
@@ -28,7 +28,7 @@ If DiabloMiner is displaying warnings about `CL_INVALID_WORK_GROUP_SIZE`, add
 `-w 64` to your arguments.
 
 #How to download#
-[/Binary download here/](http://adterrasperaspera.com/images/DiabloMiner.zip)
+__[Binary download here](http://adterrasperaspera.com/DiabloMiner.zip)__
 
 This download is always kept up to date with the newest version of the source.
 
@@ -45,9 +45,9 @@ DiabloMiner from source, heed the above warning and run `mvn package`.
 
 #How to use#
 #Single pool and solo mining#
-`./DiabloMiner-YourOS.sh -u /username/ -p /password/ -o /host/ -r /port/`
+`./DiabloMiner-YourOS.sh -u _username_ -p _password_ -o _host_ -r _port_`
 or
-`./DiabloMiner-YourOS.sh -l http:///username/:/password/@/host/:/port/`
+`./DiabloMiner-YourOS.sh -l http://_username_:_password_@_host_:_port_`
 
 For solo mining, your host is `localhost` your port is `8332`, and your
 username and password is what you set in your bitcoind's `bitcoin.conf`.
@@ -55,8 +55,8 @@ See bitcoin documentation for further information on how to enable the RPC
 API.
 
 ##Multiple pools##
-`./DiabloMiner-YourOS.sh -u /username1/,/username2/ -p /password1/,/password2/
- -o /host1/,/host2/ -r /port1/,/port2/.
+`./DiabloMiner-YourOS.sh -u _username1_,_username2_ -p _password1_,_password2_
+ -o _host1_,_host2_ -r _port1_,_port2_.
 
 DiabloMiner supports unlimited pools and will switch to the next pool on
 connection failure and return to the first pool every 60 minutes.
@@ -87,7 +87,6 @@ Cedar, Redwood, Juniper, Cypress, Hemlock
 
 * Radeon discrete: 54xx, 55xx, 56xx, 57xx, 58xx, 59xx, 63xx, 6750, 6770, 73xx
 * Radeon mobile: 54xxM, 56xxM, 57xxM, 58xxM, 63xxM, 65xxM, 68xxM,
-
 * FirePro: V3800, V4800, V5800, V7800, V8800, V9800, 2270, 2460
 * FirePro mobile: M5800, M7820
 * FireStream: 9350, 9370
@@ -127,15 +126,15 @@ Cape Verde, Pitcairn, Tahiti, New Zealand, Malta, Bonaire
 Use defaults.
 
 #Command line arugments#
-*-u, -p, -o, -r* Username, password, host, port
-*-l* Fully fledged URL, ex: http://username:password@host:port/
-*-x* Proxy, ex: host:port/:username:password/
-*-d* Debug output
-*-D* Use specific devices. Default is all.
-*-f* FPS, controls how many kernel executions a second happen, default is 30
-*-w* Controls OpenCL workgroup size, default is hardware detected maximum
-*-v /n/*: Change manual SIMD parallel alignment.
--v 1: The same as off/single hash, and is the default (`uint`)
+__-u, -p, -o, -r__ Username, password, host, port
+__-l__ Fully fledged URL, ex: http:__username:password@host:port_
+__-x__ Proxy, ex: host:port_:username:password_
+__-d__ Debug output
+__-D__ Use specific devices. Default is all.
+__-f__ FPS, controls how many kernel executions a second happen, default is 30
+__-w__ Controls OpenCL workgroup size, default is hardware detected maximum
+__-v__: Change manual SIMD parallel alignment.
+-v 1: The same as off_single hash, and is the default (`uint`)
 -v 2 through 16: Tries more than one hash via SIMD (`uint2` through `uint16`)
 -v 1,1, etc: Non-SIMD interleaved hashes, faster on a very small minority of
 hardware (`-v 2,1` is faster than `-v 2` on some VLIW5)
