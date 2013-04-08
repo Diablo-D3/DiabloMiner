@@ -72,6 +72,9 @@ above.
 It is recommended you use the default settings, however if your desktop is
 lagging badly try adding `-f 120`, `-f 180`, or `-f 240`.
 
+##Intel Hardware on any OS##
+DiabloMiner has not been tested on Intel GPUs. Default is most likely correct.
+
 ##AMD Radeon VLIW4##
 R7xx
 
