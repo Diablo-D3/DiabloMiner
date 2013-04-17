@@ -7,3 +7,4 @@ contrib/lwjgl-*.zip
 contrib/lwjgl/*
 target/*
 *exe
+start
