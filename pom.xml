@@ -4,11 +4,26 @@
 	<groupId>com.diablominer</groupId>
 	<artifactId>DiabloMiner</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	
+
 	<properties>
 	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	<lwjgl.version>2.8.5</lwjgl.version>
+	<launch4j.version>3.0.2</launch4j.version>
+	<launch4j.dir>${basedir}/launch4j/launch4j</launch4j.dir>
 	</properties>
+
+	<pluginRepositories>
+		<pluginRepository>
+			 <id>sonatype-public-repository</id>
+			 <url>https://oss.sonatype.org/content/groups/public</url>
+			 <snapshots>
+			<enabled>true</enabled>
+			 </snapshots>
+			 <releases>
+			<enabled>true</enabled>
+			 </releases>
+		</pluginRepository>
+	</pluginRepositories>
 
 	<dependencies>
 		<dependency>
@@ -37,91 +52,229 @@
 			<version>1.2</version>
 		</dependency>
 	</dependencies>
-	
+
+	<profiles>
+		<profile>
+			<id>exist-launch4j</id>
+			<activation>
+			<file>
+			<missing>launch4j/</missing> <!-- MNG-3524 -->
+			</file>
+			</activation>
+			<build>
+			<plugins>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>wagon-maven-plugin</artifactId>
+				<version>1.0-beta-4</version>
+				<executions>
+				<execution>
+				<id>download-launch4j</id>
+				<phase>generate-resources</phase>
+				<goals>
+				<goal>download-single</goal>
+				</goals>
+				<configuration>
+					<url>http://downloads.sourceforge.net</url>
+					<fromFile>/launch4j/launch4j-3/${launch4j.version}/launch4j-${launch4j.version}-${launch4j.os}.${launch4j.ext}</fromFile>
+					<toDir>${basedir}/launch4j</toDir>
+					</configuration>
+				</execution>
+				</executions>
+			</plugin>
+			</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>unpack-launch4j-windows</id>
+			<activation>
+			<os>
+			<name>Windows</name>
+			</os>
+			</activation>
+			<properties>
+			<launch4j.os>win32</launch4j.os>
+			<launch4j.ext>zip</launch4j.ext>
+			</properties>
+			<build>
+			<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-antrun-plugin</artifactId>
+				<version>1.7</version>
+				<executions>
+				<execution>
+				<id>unpack-on-windows</id>
+				<phase>process-resources</phase>
+				<configuration>
+					<target>
+						<unzip src="${basedir}/launch4j/launch4j-${launch4j.version}-${launch4j.os}.${launch4j.ext}" dest="${project.build.directory}/launch4j" />
+					</target>
+				</configuration>
+				<goals>
+				<goal>run</goal>
+				</goals>
+				</execution>
+				</executions>
+			</plugin>
+			</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>unpack-launch4j-linux-and-osx</id>
+			<activation>
+			<os>
+			<name>!Windows</name>
+			</os>
+			</activation>
+			<properties>
+			<launch4j.ext>tgz</launch4j.ext>
+			</properties>
+			<build>
+			<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-antrun-plugin</artifactId>
+				<version>1.7</version>
+				<executions>
+				<execution>
+				<id>unpack-on-unix</id>
+				<phase>process-resources</phase>
+				<configuration>
+					<target>
+					<gunzip src="${basedir}/launch4j/launch4j-${launch4j.version}-${launch4j.os}.${launch4j.ext}" dest="${basedir}/launch4j/launch4j-${launch4j.version}-${launch4j.os}.tar" />
+					<untar src="${basedir}/launch4j/launch4j-${launch4j.version}-${launch4j.os}.tar" dest="${basedir}/launch4j" />
+					<chmod dir="${launch4j.dir}/bin" perm="755" includes="*"/>
+					</target>
+				</configuration>
+				<goals>
+				<goal>run</goal>
+				</goals>
+				</execution>
+				</executions>
+			</plugin>
+			</plugins>
+			</build>
+		</profile>
+		<profile>
+			<id>unpack-launch4j-linux</id>
+			<activation>
+			<os>
+			<name>Linux</name>
+			</os>
+			</activation>
+			<properties>
+			<launch4j.os>linux</launch4j.os>
+			</properties>
+		</profile>
+		<profile>
+			<id>unpack-launch4j-osx</id>
+			<activation>
+			<os>
+			<name>Mac OS X</name>
+			<version>!10.8</version>
+			</os>
+			</activation>
+			<properties>
+			<launch4j.os>macosx-x86</launch4j.os>
+			</properties>
+		</profile>
+		<profile>
+			<id>unpack-launch4j-osx-10.8</id>
+			<activation>
+			<os>
+			<name>Mac OS X</name>
+			<version>10.8</version>
+			</os>
+			</activation>
+			<properties>
+			<launch4j.os>macosx-x86-10.8</launch4j.os>
+			</properties>
+		</profile>
+	</profiles>
+
 	<build>
 		<plugins>
 		<plugin>
 			<groupId>org.apache.maven.plugins</groupId>
 			<artifactId>maven-compiler-plugin</artifactId>
+			<version>3.1</version>
 			<configuration>
-				<source>1.5</source>
-				<target>1.5</target>
+				<source>1.6</source>
+				<target>1.6</target>
 			</configuration>
 		</plugin>
-
-		<plugin>
-			<groupId>com.akathist.maven.plugins.launch4j</groupId>
-			<artifactId>launch4j-maven-plugin</artifactId>
-			<version>1.5.1</version>
-			<executions>
-				<execution>
-				<id>windows binary</id>
-				<phase>package</phase>
-				<goals>
-					<goal>launch4j</goal>
-				</goals>
-				<configuration>
-					<headerType>console</headerType>
-					<outfile>DiabloMiner-Windows.exe</outfile>
-					<jar>target/DiabloMiner.jar</jar>
-					<errTitle>DiabloMiner</errTitle>
-					<chdir>.</chdir>
-					<classPath>
-						<mainClass>com.diablominer.DiabloMiner.DiabloMiner</mainClass>
-						<preCp>%EXEDIR%\target\libs\*</preCp>
-					</classPath>
-					<jre>
-						<minVersion>1.6.0</minVersion>
-					</jre>
-				</configuration>
-				</execution>
-			</executions>
-		</plugin>
-
 		<plugin>
 			<groupId>com.googlecode.mavennatives</groupId>
 			<artifactId>maven-nativedependencies-plugin</artifactId>
-			<version>0.0.5</version>
+			<version>0.0.7</version>
 			<executions>
-				<execution>
-					<id>unpacknatives</id>
-					<phase>generate-resources</phase>
-					<goals>
-						<goal>copy</goal>
-					</goals>
-					<configuration>
-						<nativesTargetDir>target/libs/natives</nativesTargetDir>
-					</configuration>
-				</execution>
+			<execution>
+			<id>unpack-natives</id>
+			<phase>generate-resources</phase>
+			<goals>
+			<goal>copy</goal>
+			</goals>
+			<configuration>
+				<nativesTargetDir>${project.build.directory}/libs/natives</nativesTargetDir>
+			</configuration>
+			</execution>
 			</executions>
 		</plugin>
-
 		<plugin>
 		 	<groupId>org.apache.maven.plugins</groupId>
 		 	<artifactId>maven-dependency-plugin</artifactId>
 		 	<executions>
-				<execution>
-				<id>copy-dependencies</id>
-				<phase>package</phase>
-				<goals>
-				 	<goal>copy-dependencies</goal>
-				</goals>
-				<configuration>
-				 	<outputDirectory>${project.build.directory}/libs</outputDirectory>
-				 	<overWriteReleases>false</overWriteReleases>
-				 	<overWriteSnapshots>false</overWriteSnapshots>
-				 	<overWriteIfNewer>true</overWriteIfNewer>
-				</configuration>
-				</execution>
+			<execution>
+			<id>copy-dependencies</id>
+			<phase>process-resources</phase>
+			<goals>
+		 	<goal>copy-dependencies</goal>
+			</goals>
+			<configuration>
+		 		<outputDirectory>${project.build.directory}/libs</outputDirectory>
+			 	<overWriteReleases>false</overWriteReleases>
+			 	<overWriteSnapshots>true</overWriteSnapshots>
+			 	<overWriteIfNewer>true</overWriteIfNewer>
+			</configuration>
+			</execution>
 		 	</executions>
 		</plugin>
-
 	 	<plugin>
 			<groupId>org.apache.maven.plugins</groupId>
 			<artifactId>maven-jar-plugin</artifactId>
+			<version>2.4</version>
+			<executions>
+			<execution>
+			<id>default-jar</id>
+			<phase>prepare-package</phase>
 			<configuration>
 				<finalName>DiabloMiner</finalName>
 			</configuration>
+			<goals>
+			<goal>jar</goal>
+			</goals>
+			</execution>
+			</executions>
+		</plugin>
+		<plugin>
+			<groupId>org.apache.maven.plugins</groupId>
+			<artifactId>maven-antrun-plugin</artifactId>
+			<executions>
+			<execution>
+			<id>run-launch4j</id>
+			<phase>package</phase>
+			<configuration>
+				<target>
+				<taskdef name="launch4j" classname="net.sf.launch4j.ant.Launch4jTask" classpath="${launch4j.dir}/launch4j.jar:${launch4j.dir}/lib/xstream.jar" />
+				<launch4j configFile="${basedir}/launch4j.xml" />
+				</target>
+			</configuration>
+			<goals>
+			<goal>run</goal>
+			</goals>
+			</execution>
+			</executions>
 		</plugin>
 		</plugins>
 	</build>

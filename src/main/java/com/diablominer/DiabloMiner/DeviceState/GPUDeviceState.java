@@ -86,7 +86,16 @@ public class GPUDeviceState extends DeviceState {
 		int err = 0;
 
 		int deviceCU = device.getInfoInt(CL10.CL_DEVICE_MAX_COMPUTE_UNITS);
-		long deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
+		long deviceWorkSize;
+
+		int forceWorkSize = diabloMiner.getGPUForceWorkSize();
+
+		if(forceWorkSize > 0)
+			deviceWorkSize = forceWorkSize;
+		else if(LWJGLUtil.getPlatform() != LWJGLUtil.PLATFORM_MACOSX)
+			deviceWorkSize = device.getInfoSize(CL10.CL_DEVICE_MAX_WORK_GROUP_SIZE);
+		else
+			deviceWorkSize = 64;
 
 		context = CL10.clCreateContext(properties, device, new CLContextCallback() {
 			protected void handleMessage(String errinfo, ByteBuffer private_info) {
@@ -113,16 +122,7 @@ public class GPUDeviceState extends DeviceState {
 		// "-save-temps="+(device.getInfoString(CL10.CL_DEVICE_NAME).trim());
 		String compileOptions = "";
 
-		int forceWorkSize = diabloMiner.getGPUForceWorkSize();
-
-		if(forceWorkSize > 0) {
-			compileOptions += " -D WORKSIZE=" + forceWorkSize;
-		} else {
-			if(LWJGLUtil.getPlatform() == LWJGLUtil.PLATFORM_MACOSX)
-				compileOptions += " -D WORKSIZE=64";
-			else
-				compileOptions += " -D WORKSIZE=" + deviceWorkSize;
-		}
+		compileOptions += " -D WORKSIZE=" + deviceWorkSize;
 
 		if(hasBitAlign)
 			compileOptions += " -D BITALIGN";

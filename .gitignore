@@ -6,5 +6,6 @@ contrib/lwjgl-*.pom
 contrib/lwjgl-*.zip
 contrib/lwjgl/*
 target/*
+launch4j/*
 *exe
 start

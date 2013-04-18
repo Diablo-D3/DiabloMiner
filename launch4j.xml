@@ -1,0 +1,15 @@
+<launch4jConfig>
+	<headerType>console</headerType>
+	<outfile>DiabloMiner-Windows.exe</outfile>
+	<jar>target/DiabloMiner.jar</jar>
+	<errTitle>DiabloMiner</errTitle>
+	<chdir>%EXECDIR%</chdir>
+	<classPath>
+		<mainClass>com.diablominer.DiabloMiner.DiabloMiner</mainClass>
+		<cp>%EXEDIR%\target\libs\*</cp>
+	</classPath>
+	<jre>
+		<minVersion>1.6.0</minVersion>
+	</jre>
+	<customProcName>true</customProcName>
+</launch4jConfig>
