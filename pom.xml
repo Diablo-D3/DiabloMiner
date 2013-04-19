@@ -9,6 +9,8 @@
 	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	<lwjgl.version>2.8.5</lwjgl.version>
 	<launch4j.version>3.0.2</launch4j.version>
+	<launch4j.x86-64.version>3.1.0-beta1</launch4j.x86-64.version>
+	<launch4j.x86-64.os>macosx-x86-10.8</launch4j.x86-64.os>
 	<launch4j.dir>${basedir}/launch4j/launch4j</launch4j.dir>
 	</properties>
 
@@ -76,9 +78,21 @@
 				</goals>
 				<configuration>
 					<url>http://downloads.sourceforge.net</url>
-					<fromFile>/launch4j/launch4j-3/${launch4j.version}/launch4j-${launch4j.version}-${launch4j.os}.${launch4j.ext}</fromFile>
+					<fromFile>launch4j/launch4j-3/${launch4j.version}/launch4j-${launch4j.version}-${launch4j.os}.${launch4j.ext}</fromFile>
 					<toDir>${basedir}/launch4j</toDir>
-					</configuration>
+				</configuration>
+				</execution>
+				<execution>
+				<id>download-launch4j-on-osx-10.8</id>
+				<phase>generate-resources</phase>
+				<goals>
+				<goal>download-single</goal>
+				</goals>
+				<configuration>
+					<url>http://downloads.sourceforge.net</url>
+					<fromFile>project/launch4j/launch4j-3/${launch4j.x86-64.version}/launch4j-${launch4j.x86-64.version}-${launch4j.x86-64.os}.${launch4j.ext}</fromFile>
+					<toDir>${basedir}/launch4j</toDir>
+				</configuration>
 				</execution>
 				</executions>
 			</plugin>
@@ -108,7 +122,7 @@
 				<phase>process-resources</phase>
 				<configuration>
 					<target>
-						<unzip src="${basedir}/launch4j/launch4j-${launch4j.version}-${launch4j.os}.${launch4j.ext}" dest="${project.build.directory}/launch4j" />
+						<unzip src="${basedir}/launch4j/launch4j-${launch4j.version}-${launch4j.os}.${launch4j.ext}" dest="${basedir}/launch4j" />
 					</target>
 				</configuration>
 				<goals>
@@ -172,11 +186,10 @@
 			<activation>
 			<os>
 			<name>Mac OS X</name>
-			<version>!10.8</version>
 			</os>
 			</activation>
 			<properties>
-			<launch4j.os>macosx-x86</launch4j.os>
+			<launch4j.os>macosx</launch4j.os>
 			</properties>
 		</profile>
 		<profile>
@@ -184,12 +197,41 @@
 			<activation>
 			<os>
 			<name>Mac OS X</name>
-			<version>10.8</version>
+			<arch>x86_64</arch>
 			</os>
 			</activation>
 			<properties>
-			<launch4j.os>macosx-x86-10.8</launch4j.os>
 			</properties>
+			<build>
+			<plugins>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-antrun-plugin</artifactId>
+				<version>1.7</version>
+				<executions>
+				<execution>
+				<id>unpack-on-osx-10.8</id>
+				<phase>process-resources</phase>
+				<configuration>
+					<target>
+					<gunzip src="${basedir}/launch4j/launch4j-${launch4j.x86-64.version}-${launch4j.x86-64.os}.${launch4j.ext}" dest="${basedir}/launch4j/launch4j-${launch4j.x86-64.version}-${launch4j.x86-64.os}.tar" />
+					<untar src="${basedir}/launch4j/launch4j-${launch4j.x86-64.version}-${launch4j.x86-64.os}.tar" dest="${basedir}/launch4j">
+					<patternset>
+					<include name="**/bin/*" />
+					</patternset>
+					</untar>
+					<chmod dir="${launch4j.dir}/bin" perm="755" includes="*"/>
+					</target>
+				</configuration>
+				<goals>
+				<goal>run</goal>
+				</goals>
+				</execution>
+				</executions>
+			</plugin>
+			</plugins>
+			</build>
 		</profile>
 	</profiles>
 
