@@ -14,6 +14,9 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org_licenses/>.
 
+#Donations#
+Bitcoins and Devcoins: 1DbeWKCxnVCt3sRaSAmZLoboqr8pVyFzP1
+
 #Warning#
 DiabloMiner is a command line program. This means you need to open a terminal
 (cmd.exe, Terminal.app/iTerm2, xterm, etc) and run the program with the proper
