@@ -15,7 +15,7 @@
     along with this program.  If not, see <http://www.gnu.org_licenses/>.
 
 #Donations#
-Bitcoins and Devcoins: 1DbeWKCxnVCt3sRaSAmZLoboqr8pVyFzP1
+Bitcoins and Devcoins: __1DbeWKCxnVCt3sRaSAmZLoboqr8pVyFzP1__
 
 #Warning#
 DiabloMiner is a command line program. This means you need to open a terminal
