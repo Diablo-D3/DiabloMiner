@@ -266,9 +266,9 @@ public class DiabloMiner {
 		if(line.hasOption("debug"))
 			debug = true;
 
-		if(line.hasOption("debugtimer")) {
+		if(line.hasOption("debugtimer")) 
 			debugtimer = true;
-		}
+	
 
 		if(line.hasOption("devices")) {
 			String devices[] = line.getOptionValue("devices").split(",");
@@ -292,9 +292,9 @@ public class DiabloMiner {
 			}
 		}
 
-		if(line.hasOption("noarray")) {
+		if(line.hasOption("noarray")) 
 			GPUNoArray = true;
-		}
+		
 
 		if(line.hasOption("worksize"))
 			GPUForceWorkSize = Integer.parseInt(line.getOptionValue("worksize"));
