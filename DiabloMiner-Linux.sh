@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 export GPU_USE_SYNC_OBJECTS=1
 export DISPLAY=`echo $DISPLAY | sed 's/\.[0-9]//'`
 export COMPUTE=$DISPLAY
