@@ -1,4 +1,4 @@
-#DiabloMiner - OpenCL miner for BitCoin#
+# DiabloMiner - OpenCL miner for BitCoin #
     Copyright (C) 2010 - 2013 Patrick McFarland <diablod3@gmail.com>
 
     This program is free software: you can redistribute it and_or modify
@@ -14,28 +14,28 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org_licenses/>.
 
-#Donations#
+# Donations #
 Bitcoins and Devcoins: __1DbeWKCxnVCt3sRaSAmZLoboqr8pVyFzP1__
 
-#Warning#
+# Warning #
 DiabloMiner is a command line program. This means you need to open a terminal
 (cmd.exe, Terminal.app/iTerm2, xterm, etc) and run the program with the proper
 arguments from there.
 
 You __require__ hardware that is capable of running OpenCL.
 
-#MacOSX Warning#
+# MacOSX Warning #
 Apple's OpenCL drivers often exhibit strange bugs.
 
 If DiabloMiner is displaying warnings about `CL_INVALID_WORK_GROUP_SIZE`, add
 `-w 64` to your arguments.
 
-#How to download#
+# How to download #
 __[Binary download here](http://adterrasperaspera.com/DiabloMiner.zip)__
 
 This download is always kept up to date with the newest version of the source.
 
-#How to build#
+# How to build #
 DiabloMiner requires the SDK for Java 6.0 or higher installed, as well as
 Maven 3.x. Maven will download the rest of the dependencies.
 
@@ -46,8 +46,8 @@ partially includes a build chain for Win32. launch4j cannot be ran on any
 DiabloMiner's git repo does not contian binaries, so if you want to build
 DiabloMiner from source, heed the above warning and run `mvn package`.
 
-#How to use#
-#Single pool and solo mining#
+# How to use #
+# Single pool and solo mining #
 `./DiabloMiner-YourOS.sh -u username -p password -o host -r port`
 
 or
@@ -59,26 +59,26 @@ username and password is what you set in your bitcoind's `bitcoin.conf`.
 See bitcoin documentation for further information on how to enable the RPC
 API.
 
-##Multiple pools##
+## Multiple pools ##
 `./DiabloMiner-YourOS.sh -u username1,username2 -p password1,password2
  -o host1,host2 -r port1,port2`
 
 DiabloMiner supports unlimited pools and will switch to the next pool on
 connection failure and return to the first pool every 60 minutes.
 
-#Optimization#
-##MacOSX on any hardware##
+# Optimization #
+## MacOSX on any hardware ##
 It is recommended you use the default settings, see also the MacOSX warning
 above.
 
-##Nvidia hardware on any OS##
+## Nvidia hardware on any OS ##
 It is recommended you use the default settings, however if your desktop is
 lagging badly try adding `-f 120`, `-f 180`, or `-f 240`.
 
-##Intel hardware on any OS##
+## Intel hardware on any OS ##
 DiabloMiner has not been tested on Intel GPUs. Default is most likely correct.
 
-##AMD Radeon VLIW4##
+## AMD Radeon VLIW4 ##
 R7xx
 
 * Radeon discrete: 43xx, 45xx, 46xx, 47xx, 48xx
@@ -89,7 +89,7 @@ R7xx
 
 `-v 2`
 
-##AMD Radeon VLIW5##
+## AMD Radeon VLIW5 ##
 Cedar, Redwood, Juniper, Cypress, Hemlock
 
 * Radeon discrete: 54xx, 55xx, 56xx, 57xx, 58xx, 59xx, 63xx, 6750, 6770, 73xx
@@ -100,7 +100,7 @@ Cedar, Redwood, Juniper, Cypress, Hemlock
 
 On some cards `-v 2,1` is faster, on others `-v 2`. Try both.
 
-##AMD Radeon VLIW5 Gen2##
+## AMD Radeon VLIW5 Gen2 ##
 Caicos, Turks, Barts, Wrestler, Ontario, Zacate, WinterPark, BeaverCreek
 
 * Radeon discrete: 64xx, 65xx, 66xx, 6790, 68xx, 74xx, 75xx, 76xx
@@ -112,7 +112,7 @@ Caicos, Turks, Barts, Wrestler, Ontario, Zacate, WinterPark, BeaverCreek
 
 Use `-v 2`
 
-##AMD Radeon VLIW4
+## AMD Radeon VLIW4
 Cayman, Antilles, Devastator
 
 * Radeon discrete: 69xx
@@ -122,7 +122,7 @@ Cayman, Antilles, Devastator
 
 Use `-v 2`
 
-##AMD Radeon GCN
+## AMD Radeon GCN
 Cape Verde, Pitcairn, Tahiti, New Zealand, Malta, Bonaire
 * Radeon discrete: 77xx, 78xx, 79xx
 * Radeon mobile: 77xxM, 78xxM, 79xxM
@@ -132,7 +132,7 @@ Cape Verde, Pitcairn, Tahiti, New Zealand, Malta, Bonaire
 
 Use defaults.
 
-#Command line arugments#
+# Command line arugments #
 * __-u, -p, -o, -r__ Username, password, host, port
 * __-l__ Fully fledged URL, ex: http://username:password@host:port/
 * __-x__ Proxy, ex: host:port<:username:password>
