@@ -1,3 +1,5 @@
+# This program is unmaintained and does not support the current miner protocol. Use cgminer instead. Do not create issues about this program being broken because it will not be fixed by the original developers. If you want to fix it, you're welcome to fork it.
+
 # DiabloMiner - OpenCL miner for BitCoin #
     Copyright (C) 2010 - 2013 Patrick McFarland <diablod3@gmail.com>
 
