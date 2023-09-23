@@ -45,7 +45,7 @@ DiabloMiner uses launch4j to build Windows binaries. launch4j requires and
 partially includes a build chain for Win32. launch4j cannot be ran on any
 64-bit only version of OSX (10.6 and up) and is difficult to run on Windows.
 
-DiabloMiner's git repo does not contian binaries, so if you want to build
+DiabloMiner's git repo does not contain binaries, so if you want to build
 DiabloMiner from source, heed the above warning and run `mvn package`.
 
 # How to use #
@@ -134,7 +134,7 @@ Cape Verde, Pitcairn, Tahiti, New Zealand, Malta, Bonaire
 
 Use defaults.
 
-# Command line arugments #
+# Command line arguments #
 * __-u, -p, -o, -r__ Username, password, host, port
 * __-l__ Fully fledged URL, ex: http://username:password@host:port/
 * __-x__ Proxy, ex: host:port<:username:password>

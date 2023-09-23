@@ -231,7 +231,7 @@ public class DiabloMiner {
 			try {
 				networkState = new JSONRPCNetworkState(this, new URL(protocol, host, port, path), user, pass, hostChain);
 			} catch(MalformedURLException e) {
-				throw new DiabloMinerFatalException(this, "Malformed connection paramaters");
+				throw new DiabloMinerFatalException(this, "Malformed connection parameters");
 			}
 
 			if(networkStateHead == null) {
@@ -309,7 +309,7 @@ public class DiabloMiner {
 					GPUVectors[i] = Integer.parseInt(tempVectors[i]);
 
 					if(GPUVectors[i] > 16) {
-						error("DiabloMiner now uses comma-seperated vector layouts, use those instead");
+						error("DiabloMiner now uses comma-separated vector layouts, use those instead");
 						System.exit(-1);
 					} else if(GPUVectors[i] != 1 && GPUVectors[i] != 2 && GPUVectors[i] != 3 && GPUVectors[i] != 4 && GPUVectors[i] != 8 && GPUVectors[i] != 16) {
 						error(GPUVectors[i] + " is not a vector length of 1, 2, 3, 4, 8, or 16");
